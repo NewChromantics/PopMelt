@@ -6,7 +6,9 @@ uniform mat4 CameraToWorldTransform;
 
 uniform bool DrawStepHeat = false;
 
-const float4 MoonSphere = float4(0,0,0,10);
+const float4 MoonSphere = float4(0,0,0,3);
+
+uniform sampler2D EnviromentMapEquirect;
 
 struct TRay
 {
@@ -76,6 +78,36 @@ float3 GetMoonColour(float3 Position)
 }
 
 
+
+#define PI 3.14159265359
+
+float atan2(float x,float y)
+{
+	return atan( y, x );
+}
+
+
+//	https://github.com/SoylentGraham/PopUnityCommon/blob/master/PopCommon.cginc#L298
+float2 ViewToEquirect(float3 View3)
+{
+	View3 = normalize(View3);
+	float2 longlat = float2(atan2(View3.x, View3.z) + PI, acos(-View3.y));
+	
+	//longlat.x += lerp( 0, UNITY_PI*2, Range( 0, 360, LatitudeOffset ) );
+	//longlat.y += lerp( 0, UNITY_PI*2, Range( 0, 360, LongitudeOffset ) );
+	
+	float2 uv = longlat / float2(2.0 * PI, PI);
+	
+	return uv;
+}
+
+float3 GetEnvironmentColour(float3 View)
+{
+	float2 uv = ViewToEquirect(View);
+	float3 Rgb = texture2D( EnviromentMapEquirect, uv ).xyz;
+	return Rgb;
+}
+
 float3 NormalToRedGreen(float Normal)
 {
 	if ( Normal < 0.5 )
@@ -137,7 +169,7 @@ float4 RayMarchSphere(TRay Ray,out float StepHeat)
 void main()
 {
 	TRay Ray = GetWorldRay();
-	float4 Colour = float4(0,0,0,0);
+	float4 Colour = float4( GetEnvironmentColour(Ray.Dir), 1 );
 	
 	float StepHeat;
 	float4 SphereColour = RayMarchSphere( Ray, StepHeat );

@@ -46,6 +46,8 @@ function MeltGameRender(RenderTarget,GameState)
 	const Shader = GetAsset(Runtime.SceneShader,RenderTarget);
 	const Camera = Runtime.Camera;
 	
+	const EnviromentMapEquirect = Runtime.EnvironmentMapFile;
+	
 	const WorldToCameraMatrix = Camera.GetWorldToCameraMatrix();
 	const CameraProjectionMatrix = Camera.GetProjectionMatrix( RenderTarget.GetScreenRect() );
 	const ScreenToCameraTransform = Math.MatrixInverse4x4( CameraProjectionMatrix );
@@ -67,6 +69,7 @@ function MeltGameRender(RenderTarget,GameState)
 		Shader.SetUniform('CameraToWorldTransform',CameraToWorldTransform);
 		Shader.SetUniform('LocalToWorldTransform',LocalToWorldTransform);
 		Shader.SetUniform('WorldToLocalTransform',WorldToLocalTransform);
+		Shader.SetUniform('EnviromentMapEquirect',EnviromentMapEquirect);
 	}
 	RenderTarget.SetBlendModeAlpha();
 	RenderTarget.DrawGeometry( Quad, Shader, SetUniforms );
@@ -76,8 +79,9 @@ async function LoadAssets()
 {
 	const AssetFilenames =
 	[
-	'SceneMarch.frag.glsl',
-	'Quad.vert.glsl'
+	 'SceneMarch.frag.glsl',
+	 'SceneTrace.frag.glsl',
+	 'Quad.vert.glsl'
 	];
 	const AssetPromises = AssetFilenames.map( Pop.LoadFileAsStringAsync );
 	await Promise.all(AssetPromises);
@@ -97,8 +101,8 @@ async function ResetGame()
 	Game.Runtime = {};
 	Game.Runtime.Render = function(RenderTarget)	{	MeltGameRender(RenderTarget,Game);	}
 	Game.Runtime.Camera = new Pop.Camera();
-	Game.Runtime.SceneShader = RegisterShaderAssetFilename('SceneMarch.frag.glsl','Quad.vert.glsl');
-
+	Game.Runtime.SceneShader = RegisterShaderAssetFilename('SceneTrace.frag.glsl','Quad.vert.glsl');
+	Game.Runtime.EnvironmentMapFile = await Pop.LoadFileAsImageAsync('TestEnvMapEquirect.jpg');
 	return Game;
 }
 
