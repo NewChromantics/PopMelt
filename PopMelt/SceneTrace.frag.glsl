@@ -183,31 +183,34 @@ THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 		RayTime += HitDistance;
 		if ( HitDistance < CloseEnough )
 		{
-			//	are we refracting?
+			//	gr: we can make all this generic. Get a distance (including -X when inside)
+			//		return a refrect option instead of bounce, then work this out to change the ray
+
 			//float RefractionScalar = 0.66;	//	for chromatic abberation, use r=0.65 g=0.66 b=0.67
 			vec3 Refracted = refract( normalize(Ray.Dir), normalize(Normal), RefractionScalar );
 			vec3 Reflected = reflect( normalize(Ray.Dir), normalize(Normal) );
 			float EdgeDot = (1.0-abs(dot(normalize(Ray.Dir),Normal)));
 			Refracted = Slerp( Refracted, Reflected, EdgeDot );
+
 			//Hit.Colour = NormalToRedGreen(EdgeDot);
 			Hit.Colour = float3(1,1,1);
-			
+			Hit.Hit = true;
+
 			//	gr; use EdgeDot > 0.5 for reflecting light?
 			{
 				Hit.HitPositionAndReflection.Dir = Refracted;
 				Hit.HitPositionAndReflection.Pos = Position;
+				
 				//	step ever so slightly past the edge so bounce doesnt start on edge
+				//	move this to generic code
 				Hit.HitPositionAndReflection.Pos += Hit.HitPositionAndReflection.Dir;
 				//Hit.Colour = GetEnvironmentColour(Hit.HitPositionAndReflection.Dir);
-				Hit.Colour = float3(1,1,1);
 				Hit.Bounce = true;
 				//	test how far this ray has gone
 				//Hit.Colour = NormalToRedGreen( length(StartPos-Position)/25 );
 				//	difference in refraction
 				//Hit.Colour = NormalToRedGreen( length(-Normal-Refracted));
 			}
-
-			Hit.Hit = true;
 			
 			//	inside
 			if ( HitDistance < 0 )
