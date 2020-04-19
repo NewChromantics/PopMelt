@@ -18,7 +18,28 @@ Pop.Include('AssetManager.js');
 
 const Window = new Pop.Opengl.Window("Melt");
 Window.OnRender = GameRender;
-Window.OnMouseMove = function(){};
+
+
+Window.OnMouseMove = function(x,y,MouseButton)
+{
+	const Camera = GetCamera ? GetCamera() : null;
+	if ( Camera && MouseButton == 0 )
+	{
+		Camera.OnCameraOrbit(x,y,0,false);
+	}
+}
+Window.OnMouseDown = function(x,y,MouseButton)
+{
+	const Camera = GetCamera ? GetCamera() : null;
+	if ( Camera && MouseButton == 0 )
+	{
+		Camera.OnCameraOrbit(x,y,0,true);
+	}
+}
+
+let GetCamera = null;
+
+
 
 const Params = {};
 Params.ClearColour = [0.8,0.5,0.1];
@@ -41,6 +62,7 @@ function MeltGameRender(RenderTarget,GameState)
 	RenderTarget.ClearColour(...Params.ClearColour);
 	
 	Runtime.Camera.FovVertical = Params.FovVertical;
+	GetCamera = function()	{	return Runtime.Camera;	}
 	
 	const Quad = GetAsset('Quad',RenderTarget);
 	const Shader = GetAsset(Runtime.SceneShader,RenderTarget);
