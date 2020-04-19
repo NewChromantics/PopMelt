@@ -34,6 +34,7 @@ struct THit
 {
 	TRay HitPositionAndReflection;
 	bool Hit;
+	float Distance;
 	
 	//	todo: how much light/colour was absorbed in this hit
 	bool Bounce;
@@ -214,49 +215,7 @@ float3 DistanceToMoonNormal(float3 Position)
 	return normalize(n);
 	 */
 }
-/*
 
-
-float DistanceToMoon(float3 Position,out float3 Normal)
-{
-	bool UseBox = true;
-	float Distance;
-	float3 LocalPosition;
-	
-	if ( UseBox )
-	{
-		float3 BoxPos = MoonSphere.xyz;
-		float3 BoxSize = float3(MoonSphere.w*0.5,MoonSphere.w*0.7,MoonSphere.w*0.8);
-		LocalPosition = Position-BoxPos;
-		Distance = sdBox( LocalPosition, BoxSize );
-
-		const float eps = 0.0001; // or some other value
-		const vec2 h = vec2(eps,0);
-		float3 p = LocalPosition;
-		Normal = normalize( vec3(sdBox(p+h.xyy, BoxSize) - sdBox(p-h.xyy, BoxSize),
-								 sdBox(p+h.yxy, BoxSize) - sdBox(p-h.yxy, BoxSize),
-								 sdBox(p+h.yyx, BoxSize) - sdBox(p-h.yyx, BoxSize) ) );
-
-	}
-	else
-	{
-		float MoonRadius = MoonSphere.w;
-		LocalPosition = Position - MoonSphere.xyz;
-		float3 DeltaToCenter = MoonSphere.xyz - Position;
-		Normal = -DeltaToCenter;
-		Distance = length( DeltaToCenter ) - MoonRadius;
-	}
-	Distance -= GetMoonEdgeThickness(Position);
-	
-	if ( Distance < 0 )
-		Normal = -Normal;
-
-	//	distance edge rather than solid
-	Distance = abs(Distance);
-	
-	return Distance;
-}
-*/
 
 vec3 Slerp(vec3 p0, vec3 p1, float t)
 {
@@ -286,12 +245,59 @@ bool refract(vec3 v,vec3 n,float ni_over_nt, out vec3 refracted)
 	}
 }
 
-/*
+uniform float PlaneY;
+
 THit RayMarchPlane(TRay Ray,inout TDebug Debug)
 {
- 
+	//Ray.Pos.y += 30;
+	float3 PlaneNormal = float3(0,1,0);
+	float PlaneOffset = PlaneY;
+	
+	//	https://gist.github.com/doxas/e9a3d006c7d19d2a0047
+	float PlaneDistance = -PlaneOffset;
+	float Denom = dot( Ray.Dir, PlaneNormal);
+	float t = -(dot( Ray.Pos, PlaneNormal) + PlaneDistance) / Denom;
+	/*
+	//	wrong side, enable for 2 sided
+	if ( t <= 0 )
+	{
+		THit Hit;
+		Hit.Hit = false;
+		return Hit;
+	}
+	*/
+	float t_min = 0.001;
+	float t_max = 9999;
+	if (t < t_min || t > t_max)
+	{
+		THit Hit;
+		Hit.Hit = false;
+		Hit.Distance = 9999;
+		return Hit;
+	}
+	
+	
+	
+	THit Hit;
+	Hit.Hit = true;
+	Hit.Distance = t;
+	Hit.HitPositionAndReflection.Pos = GetRayPositionAtTime(Ray, t);
+	Hit.HitPositionAndReflection.Dir = PlaneNormal;
+	Hit.Colour = float3(0,0,0);
+	Hit.Bounce = false;
+	//Hit.mat = PlaneMaterial;
+	//Hit.normal = PlaneNormal;
+
+	//	put holes in the floor
+	float2 xz = fract(Hit.HitPositionAndReflection.Pos.xz / 20);
+	bool Oddx = xz.x<0.5;
+	bool Oddy = xz.y<0.5;
+	if ( Oddx == Oddy )
+		Hit.Hit = false;
+	
+	return Hit;
 }
-*/
+
 
 THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 {
@@ -334,6 +340,7 @@ THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 			//Hit.Colour = NormalToRedGreen(EdgeDot);
 			Hit.Colour = float3(1,1,1);
 			Hit.Hit = true;
+			Hit.Distance = HitDistance;
 
 			//	gr; use EdgeDot > 0.5 for reflecting light?
 			{
@@ -382,8 +389,18 @@ THit AllocHit(TRay StartRay)
 THit RayMarchScene(TRay Ray,inout TDebug Debug)
 {
 	//	pick best hit
-	THit Hit0 = RayMarchSphere( Ray, Debug );
-	return Hit0;
+	TRay Ray0 = Ray;
+	TRay Ray1 = Ray;
+	THit Hit1 = RayMarchPlane( Ray0, Debug );
+	THit Hit0 = RayMarchSphere( Ray1, Debug );
+
+	Hit0.Distance = Hit0.Hit ? Hit0.Distance : 999;
+	Hit1.Distance = Hit1.Hit ? Hit1.Distance : 999;
+
+	if ( Hit0.Distance < Hit1.Distance )
+		return Hit0;
+	
+	return Hit1;
 }
 
 THit GetSkyboxHit(TRay Ray,out TDebug Debug)
@@ -398,7 +415,7 @@ THit GetSkyboxHit(TRay Ray,out TDebug Debug)
 //	returns intersction pos, w=success
 THit RayTraceScene(TRay Ray,out TDebug Debug)
 {
-#define BOUNCES	5
+#define BOUNCES	4
 	//	save last hit in case we exceed bounces
 	THit LastHit;
 	for (int Bounce=0;	Bounce<BOUNCES;	Bounce++)
