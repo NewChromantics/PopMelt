@@ -74,6 +74,7 @@ Params.MoonEdgeThicknessNoiseFreq = 1.0;
 Params.MoonEdgeThicknessNoiseScale = 1.0;
 Params.BouncePastEdge = 0.24;
 Params.NormalViaRayStart = 0.001;
+Params.TimeMult = 1.01;
 
 const ParamsWindow = new Pop.ParamsWindow(Params,function(){});
 ParamsWindow.AddParam('RefractionScalar',0,1);
@@ -82,6 +83,7 @@ ParamsWindow.AddParam('MoonEdgeThicknessNoiseFreq',0,10);
 ParamsWindow.AddParam('MoonEdgeThicknessNoiseScale',0,10);
 ParamsWindow.AddParam('BouncePastEdge',0.001,1);
 ParamsWindow.AddParam('NormalViaRayStart',0,1);
+ParamsWindow.AddParam('TimeMult',0,5);
 
 
 function GameRender(RenderTarget)
@@ -94,6 +96,8 @@ function GameRender(RenderTarget)
 }
 
 let RenderGameFunc = null;
+
+const StartTime = Pop.GetTimeNowMs();
 
 function MeltGameRender(RenderTarget,GameState)
 {
@@ -134,7 +138,8 @@ function MeltGameRender(RenderTarget,GameState)
 		Shader.SetUniform('WorldToLocalTransform',WorldToLocalTransform);
 		Shader.SetUniform('EnviromentMapEquirect',EnviromentMapEquirect);
 		Shader.SetUniform('NoiseTexture',NoiseTexture);
-		Shader.SetUniform('Time',Pop.GetTimeNowMs()/1000);
+		const Time = (Pop.GetTimeNowMs() - StartTime)/1000;
+		Shader.SetUniform('Time',Time);
 	}
 	RenderTarget.SetBlendModeAlpha();
 	RenderTarget.DrawGeometry( Quad, Shader, SetUniforms );

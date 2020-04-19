@@ -13,7 +13,8 @@ uniform float MoonEdgeThicknessNoiseFreq;
 uniform float MoonEdgeThicknessNoiseScale;
 uniform float BouncePastEdge;
 uniform float NormalViaRayStart;
-uniform bool NormalNewMethod;
+uniform float Time;
+uniform float TimeMult;
 
 uniform sampler2D EnviromentMapEquirect;
 uniform sampler2D NoiseTexture;
@@ -119,13 +120,11 @@ float Range(float Min,float Max,float Value)
 	return (Value-Min) / (Max-Min);
 }
 
-uniform float Time;
 
 float GetMoonEdgeThickness(vec3 Position)
 {
 	float Thickness = MoonEdgeThickness;
-
-	/*
+/*
 	float2 uv;
 	uv.x = Range( -MoonEdgeThicknessNoiseFreq, MoonEdgeThicknessNoiseFreq, Position.x );
 	uv.y = Range( -MoonEdgeThicknessNoiseFreq, MoonEdgeThicknessNoiseFreq, Position.z * Position.y );
@@ -133,18 +132,17 @@ float GetMoonEdgeThickness(vec3 Position)
 */
 	//	gr: this is SO expensive
 	//	"noise"
-	/*
-	float3 Offsetxyz = Position + float3(Time,Time,Time);
+	Position += Time*TimeMult;
+	
 	//float Offset = sin(Offsetxy.x*MoonEdgeThicknessNoiseFreq) * cos(Offsetxy.y*MoonEdgeThicknessNoiseFreq);
-	float OffsetX = sin(Offsetxyz.x*MoonEdgeThicknessNoiseFreq) * MoonEdgeThicknessNoiseScale;
-	float OffsetY = cos(Offsetxyz.y*MoonEdgeThicknessNoiseFreq) * MoonEdgeThicknessNoiseScale;
-	//float OffsetZ = sin(Offsetxyz.z*MoonEdgeThicknessNoiseFreq) * MoonEdgeThicknessNoiseScale;
-	float OffsetZ = 1;//sin(Offsetxyz.z*MoonEdgeThicknessNoiseFreq) * MoonEdgeThicknessNoiseScale;
-	//float Offset = OffsetX * OffsetY * OffsetZ;
-	float Offset = abs(OffsetX);
-	*/
-	float Offset = sin(Position.x*MoonEdgeThicknessNoiseFreq) * cos(Position.y*MoonEdgeThicknessNoiseFreq);
-	Thickness *= 1 + Offset;
+	float OffsetX = sin(Position.x*MoonEdgeThicknessNoiseFreq);
+	float OffsetY = cos(Position.y*MoonEdgeThicknessNoiseFreq);
+	float OffsetZ = 1;//cos(Position.z*MoonEdgeThicknessNoiseFreq);
+	float Offset = OffsetX * OffsetY * OffsetZ;
+	
+	//float Offset = sin( Position.x*MoonEdgeThicknessNoiseFreq);// * cos(Position.y*MoonEdgeThicknessNoiseFreq);
+	
+	Thickness *= 1 + (Offset * MoonEdgeThicknessNoiseScale);
 	return Thickness;
 }
 
@@ -195,17 +193,26 @@ float3 sdBoxNormal(vec3 p,vec3 b)
 
 float3 DistanceToMoonNormal(float3 Position)
 {
-	//float Distance = DistanceToMoonShape(Position);
-	
 	//	gr: newer method, very little difference to other one, but this is a fewer number of calls
-#define map DistanceToMoonShape
 	//	https://www.shadertoy.com/view/Xds3zN
 	vec2 e = vec2(1.0,-1.0)*0.5773*0.0005;
-	float3 Normal = normalize( e.xyy*map( Position + e.xyy ) +
-					 e.yyx*map( Position + e.yyx ) +
-					 e.yxy*map( Position + e.yxy ) +
-					 e.xxx*map( Position + e.xxx ) );
+	float3 Normal = normalize( e.xyy*DistanceToMoonShape( Position + e.xyy ) +
+					 e.yyx*DistanceToMoonShape( Position + e.yyx ) +
+					 e.yxy*DistanceToMoonShape( Position + e.yxy ) +
+					 e.xxx*DistanceToMoonShape( Position + e.xxx ) );
 	return Normal;
+	
+	/*
+	// inspired by tdhooper and klems - a way to prevent the compiler from inlining map() 4 times
+#define ZERO (min(1,0))
+	vec3 n = vec3(0.0);
+	for( int i=ZERO; i<4; i++ )
+	{
+		vec3 e = 0.5773*(2.0*vec3((((i+3)>>1)&1),((i>>1)&1),(i&1))-1.0);
+		n += e*DistanceToMoonShape(Position+0.0005*e);
+	}
+	return normalize(n);
+	 */
 }
 /*
 
@@ -312,7 +319,8 @@ THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 			//	special call to get normal
 			//	gr: if we calc the normal too close to the surface, we get (I think) some nan/0 normals. Too far away and its not fine enough!
 			//	just need a tiny tiny offset!
-			float3 Normal = DistanceToMoonNormal( mix(Position,Ray.Pos,NormalViaRayStart) );
+			//float3 Normal = DistanceToMoonNormal( mix(Position,Ray.Pos,NormalViaRayStart) );
+			float3 Normal = DistanceToMoonNormal( Position-Ray.Dir*NormalViaRayStart );
 			
 			//	gr: we can make all this generic. Get a distance (including -X when inside)
 			//		return a refrect option instead of bounce, then work this out to change the ray
