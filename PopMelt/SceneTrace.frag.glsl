@@ -9,8 +9,12 @@ uniform float RefractionScalar = 0.66;
 
 const float4 MoonSphere = float4(0,0,0,5);
 uniform float MoonEdgeThickness = 0.2;
+uniform float MoonEdgeThicknessNoiseFreq;
+uniform float MoonEdgeThicknessNoiseScale;
+uniform float BouncePastEdge;
 
 uniform sampler2D EnviromentMapEquirect;
+uniform sampler2D NoiseTexture;
 
 struct TRay
 {
@@ -89,6 +93,7 @@ float3 GetEnvironmentColour(float3 View)
 {
 	float2 uv = ViewToEquirect(View);
 	float3 Rgb = texture2D( EnviromentMapEquirect, uv ).xyz;
+	//float3 Rgb = texture2D( NoiseTexture, uv ).xyz;
 	return Rgb;
 }
 
@@ -107,22 +112,65 @@ float3 NormalToRedGreen(float Normal)
 	}
 }
 
-float GetMoonEdgeThickness()
+float Range(float Min,float Max,float Value)
 {
-	return MoonEdgeThickness;
+	return (Value-Min) / (Max-Min);
 }
 
-float DistanceToMoon(float3 Position,out float3 Normal)
+uniform float Time;
+
+float GetMoonEdgeThickness(vec3 Position)
 {
-	float MoonRadius = MoonSphere.w;
-	float3 DeltaToCenter = MoonSphere.xyz - Position;
-	Normal = -normalize( DeltaToCenter );
-	float Distance = length( DeltaToCenter ) - MoonRadius;
-	Distance -= GetMoonEdgeThickness();
+	float Thickness = MoonEdgeThickness;
+
+	/*
+	float2 uv;
+	uv.x = Range( -MoonEdgeThicknessNoiseFreq, MoonEdgeThicknessNoiseFreq, Position.x );
+	uv.y = Range( -MoonEdgeThicknessNoiseFreq, MoonEdgeThicknessNoiseFreq, Position.z * Position.y );
+	float Offset = texture2D(NoiseTexture,uv).x;
+*/
+	//	gr: this is SO expensive
+	//	"noise"
+	float3 Offsetxyz = Position + float3(Time,Time,Time);
+	//float Offset = sin(Offsetxy.x*MoonEdgeThicknessNoiseFreq) * cos(Offsetxy.y*MoonEdgeThicknessNoiseFreq);
+	float OffsetX = sin(Offsetxyz.x*MoonEdgeThicknessNoiseFreq) * MoonEdgeThicknessNoiseScale;
+	float OffsetY = cos(Offsetxyz.y*MoonEdgeThicknessNoiseFreq) * MoonEdgeThicknessNoiseScale;
+	//float OffsetZ = sin(Offsetxyz.z*MoonEdgeThicknessNoiseFreq) * MoonEdgeThicknessNoiseScale;
+	float OffsetZ = 1;//sin(Offsetxyz.z*MoonEdgeThicknessNoiseFreq) * MoonEdgeThicknessNoiseScale;
+	//float Offset = OffsetX * OffsetY * OffsetZ;
+	float Offset = abs(OffsetX);
+
+	Thickness *= 1 + Offset;
+	return Thickness;
+}
+
+float sdBox( vec3 p, vec3 b)
+{
+	vec3 q = abs(p) - b;
+	return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+}
+
+float DistanceToMoonShape(float3 Position)
+{
+	bool UseBox = true;
+	float Distance;
+	float3 LocalPosition;
 	
-	//	invert normal when on the inside
-	if ( Distance < 0 )
-		Normal = -Normal;
+	if ( UseBox )
+	{
+		float3 BoxPos = MoonSphere.xyz;
+		float3 BoxSize = float3(MoonSphere.w*0.5,MoonSphere.w*0.7,MoonSphere.w*0.8);
+		LocalPosition = Position-BoxPos;
+		Distance = sdBox( LocalPosition, BoxSize );
+	}
+	else
+	{
+		float MoonRadius = MoonSphere.w;
+		LocalPosition = Position - MoonSphere.xyz;
+		float3 DeltaToCenter = MoonSphere.xyz - Position;
+		Distance = length( DeltaToCenter ) - MoonRadius;
+	}
+	Distance -= GetMoonEdgeThickness(LocalPosition);
 	
 	//	distance edge rather than solid
 	Distance = abs(Distance);
@@ -130,6 +178,82 @@ float DistanceToMoon(float3 Position,out float3 Normal)
 	return Distance;
 }
 
+
+
+float3 sdBoxNormal(vec3 p,vec3 b)
+{
+	const float eps = 0.0001; // or some other value
+	const vec2 h = vec2(eps,0);
+	return normalize( vec3(sdBox(p+h.xyy,b) - sdBox(p-h.xyy,b),
+						   sdBox(p+h.yxy,b) - sdBox(p-h.yxy,b),
+						   sdBox(p+h.yyx,b) - sdBox(p-h.yyx,b) ) );
+}
+
+float DistanceToMoon(float3 Position,out float3 Normal)
+{
+	float Distance = DistanceToMoonShape(Position);
+	//Normal = sdBoxNormal( LocalPosition, BoxSize );
+
+	
+	const float eps = 0.0001; // or some other value
+	const vec2 h = vec2(eps,0);
+	vec3 p = Position;
+	//	gr: this doesn't seem right, I think we need to double check the xyz direction here
+	//	like the test has to be in local space?
+	Normal = normalize( vec3(DistanceToMoonShape(p+h.xyy) - DistanceToMoonShape(p-h.xyy),
+							 DistanceToMoonShape(p+h.yxy) - DistanceToMoonShape(p-h.yxy),
+							 DistanceToMoonShape(p+h.yyx) - DistanceToMoonShape(p-h.yyx) ) );
+
+	//	invert normal when on the inside
+	//float InsideDistance = DistanceToMoonShapeNoEdge(Position);
+	//if ( InsideDistance < 0 )
+	//	Normal = -Normal;
+ 
+	return Distance;
+}
+/*
+
+
+float DistanceToMoon(float3 Position,out float3 Normal)
+{
+	bool UseBox = true;
+	float Distance;
+	float3 LocalPosition;
+	
+	if ( UseBox )
+	{
+		float3 BoxPos = MoonSphere.xyz;
+		float3 BoxSize = float3(MoonSphere.w*0.5,MoonSphere.w*0.7,MoonSphere.w*0.8);
+		LocalPosition = Position-BoxPos;
+		Distance = sdBox( LocalPosition, BoxSize );
+
+		const float eps = 0.0001; // or some other value
+		const vec2 h = vec2(eps,0);
+		float3 p = LocalPosition;
+		Normal = normalize( vec3(sdBox(p+h.xyy, BoxSize) - sdBox(p-h.xyy, BoxSize),
+								 sdBox(p+h.yxy, BoxSize) - sdBox(p-h.yxy, BoxSize),
+								 sdBox(p+h.yyx, BoxSize) - sdBox(p-h.yyx, BoxSize) ) );
+
+	}
+	else
+	{
+		float MoonRadius = MoonSphere.w;
+		LocalPosition = Position - MoonSphere.xyz;
+		float3 DeltaToCenter = MoonSphere.xyz - Position;
+		Normal = -DeltaToCenter;
+		Distance = length( DeltaToCenter ) - MoonRadius;
+	}
+	Distance -= GetMoonEdgeThickness(Position);
+	
+	if ( Distance < 0 )
+		Normal = -Normal;
+
+	//	distance edge rather than solid
+	Distance = abs(Distance);
+	
+	return Distance;
+}
+*/
 
 vec3 Slerp(vec3 p0, vec3 p1, float t)
 {
@@ -158,6 +282,13 @@ bool refract(vec3 v,vec3 n,float ni_over_nt, out vec3 refracted)
 		return false;
 	}
 }
+
+/*
+THit RayMarchPlane(TRay Ray,inout TDebug Debug)
+{
+ 
+}
+*/
 
 THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 {
@@ -203,7 +334,7 @@ THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 				
 				//	step ever so slightly past the edge so bounce doesnt start on edge
 				//	move this to generic code
-				Hit.HitPositionAndReflection.Pos += Hit.HitPositionAndReflection.Dir;
+				Hit.HitPositionAndReflection.Pos += Hit.HitPositionAndReflection.Dir * BouncePastEdge;
 				//Hit.Colour = GetEnvironmentColour(Hit.HitPositionAndReflection.Dir);
 				Hit.Bounce = true;
 				//	test how far this ray has gone
@@ -259,7 +390,7 @@ THit GetSkyboxHit(TRay Ray,out TDebug Debug)
 //	returns intersction pos, w=success
 THit RayTraceScene(TRay Ray,out TDebug Debug)
 {
-#define BOUNCES	3
+#define BOUNCES	5
 	//	save last hit in case we exceed bounces
 	THit LastHit;
 	for (int Bounce=0;	Bounce<BOUNCES;	Bounce++)

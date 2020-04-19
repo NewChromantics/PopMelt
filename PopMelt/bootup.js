@@ -19,6 +19,7 @@ Pop.Include('AssetManager.js');
 
 
 const Window = new Pop.Opengl.Window("Melt");
+Window.RenderCounter = new Pop.FrameCounter('fps');
 Window.OnRender = GameRender;
 
 
@@ -68,16 +69,23 @@ const Params = {};
 Params.ClearColour = [0.8,0.5,0.1];
 Params.FovVertical = 45;
 Params.RefractionScalar = 0.66;
-Params.MoonEdgeThickness = 0.0;
+Params.MoonEdgeThickness = 0.2;
+Params.MoonEdgeThicknessNoiseFreq = 1.0;
+Params.MoonEdgeThicknessNoiseScale = 1.0;
+Params.BouncePastEdge = 0.24;
 
 const ParamsWindow = new Pop.ParamsWindow(Params,function(){});
 ParamsWindow.AddParam('RefractionScalar',0,1);
 ParamsWindow.AddParam('MoonEdgeThickness',0,1);
+ParamsWindow.AddParam('MoonEdgeThicknessNoiseFreq',0,10);
+ParamsWindow.AddParam('MoonEdgeThicknessNoiseScale',0,10);
+ParamsWindow.AddParam('BouncePastEdge',0.001,1);
 
 
 function GameRender(RenderTarget)
 {
 	RenderTarget.ClearColour(1,0,0);
+	Window.RenderCounter.Add();
 	
 	if ( RenderGameFunc )
 		RenderGameFunc( RenderTarget );
@@ -99,7 +107,8 @@ function MeltGameRender(RenderTarget,GameState)
 	const Camera = Runtime.Camera;
 	
 	const EnviromentMapEquirect = Runtime.EnvironmentMapFile;
-	
+	const NoiseTexture = Runtime.NoiseTexture;
+
 	const WorldToCameraMatrix = Camera.GetWorldToCameraMatrix();
 	const CameraProjectionMatrix = Camera.GetProjectionMatrix( RenderTarget.GetScreenRect() );
 	const ScreenToCameraTransform = Math.MatrixInverse4x4( CameraProjectionMatrix );
@@ -122,6 +131,8 @@ function MeltGameRender(RenderTarget,GameState)
 		Shader.SetUniform('LocalToWorldTransform',LocalToWorldTransform);
 		Shader.SetUniform('WorldToLocalTransform',WorldToLocalTransform);
 		Shader.SetUniform('EnviromentMapEquirect',EnviromentMapEquirect);
+		Shader.SetUniform('NoiseTexture',NoiseTexture);
+		Shader.SetUniform('Time',Pop.GetTimeNowMs()/1000);
 	}
 	RenderTarget.SetBlendModeAlpha();
 	RenderTarget.DrawGeometry( Quad, Shader, SetUniforms );
@@ -155,6 +166,7 @@ async function ResetGame()
 	Game.Runtime.Camera = new Pop.Camera();
 	Game.Runtime.SceneShader = RegisterShaderAssetFilename('SceneTrace.frag.glsl','Quad.vert.glsl');
 	Game.Runtime.EnvironmentMapFile = await Pop.LoadFileAsImageAsync('TestEnvMapEquirect.jpg');
+	Game.Runtime.NoiseTexture = await Pop.LoadFileAsImageAsync('Noise.png');
 	return Game;
 }
 
