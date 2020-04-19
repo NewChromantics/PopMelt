@@ -73,6 +73,7 @@ Params.MoonEdgeThickness = 0.2;
 Params.MoonEdgeThicknessNoiseFreq = 1.0;
 Params.MoonEdgeThicknessNoiseScale = 1.0;
 Params.BouncePastEdge = 0.24;
+Params.NormalViaRayStart = 0.001;
 
 const ParamsWindow = new Pop.ParamsWindow(Params,function(){});
 ParamsWindow.AddParam('RefractionScalar',0,1);
@@ -80,6 +81,7 @@ ParamsWindow.AddParam('MoonEdgeThickness',0,1);
 ParamsWindow.AddParam('MoonEdgeThicknessNoiseFreq',0,10);
 ParamsWindow.AddParam('MoonEdgeThicknessNoiseScale',0,10);
 ParamsWindow.AddParam('BouncePastEdge',0.001,1);
+ParamsWindow.AddParam('NormalViaRayStart',0,1);
 
 
 function GameRender(RenderTarget)
