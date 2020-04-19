@@ -5,8 +5,10 @@ uniform mat4 ScreenToCameraTransform;
 uniform mat4 CameraToWorldTransform;
 
 uniform bool DrawStepHeat = false;
+uniform float RefractionScalar = 0.66;
 
-const float4 MoonSphere = float4(0,0,0,3);
+const float4 MoonSphere = float4(0,0,0,5);
+uniform float MoonEdgeThickness = 0.2;
 
 uniform sampler2D EnviromentMapEquirect;
 
@@ -105,15 +107,56 @@ float3 NormalToRedGreen(float Normal)
 	}
 }
 
+float GetMoonEdgeThickness()
+{
+	return MoonEdgeThickness;
+}
 
 float DistanceToMoon(float3 Position,out float3 Normal)
 {
-	float3 DeltaToSurface = MoonSphere.xyz - Position;
-	Normal = -normalize( DeltaToSurface );
 	float MoonRadius = MoonSphere.w;
-	float3 MoonSurfacePoint = MoonSphere.xyz + Normal * MoonRadius;
-	float Distance = length( Position - MoonSurfacePoint );
+	float3 DeltaToCenter = MoonSphere.xyz - Position;
+	Normal = -normalize( DeltaToCenter );
+	float Distance = length( DeltaToCenter ) - MoonRadius;
+	Distance -= GetMoonEdgeThickness();
+	
+	//	invert normal when on the inside
+	if ( Distance < 0 )
+		Normal = -Normal;
+	
+	//	distance edge rather than solid
+	Distance = abs(Distance);
+	
 	return Distance;
+}
+
+
+vec3 Slerp(vec3 p0, vec3 p1, float t)
+{
+	float dotp = dot(normalize(p0), normalize(p1));
+	if ((dotp > 0.9999) || (dotp<-0.9999))
+	{
+		if (t<=0.5)
+			return p0;
+		return p1;
+	}
+	float theta = acos(dotp);
+	vec3 P = ((p0*sin((1.0-t)*theta) + p1*sin(t*theta)) / sin(theta));
+	return P;
+}
+
+bool refract(vec3 v,vec3 n,float ni_over_nt, out vec3 refracted)
+{
+	vec3 uv = normalize(v);
+	float dt = dot(uv, n);
+	float discriminant = 1.0 - ni_over_nt * ni_over_nt * (1.0 - dt * dt);
+	if (discriminant > 0.0)
+	{
+		refracted = ni_over_nt * (uv - n * dt) - n * sqrt(discriminant);
+		return true;
+	} else {
+		return false;
+	}
 }
 
 THit RayMarchSphere(TRay Ray,inout TDebug Debug)
@@ -126,8 +169,9 @@ THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 	const float MinStep = MinDistance;
 	const float MaxDistance = 100.0;
 	const int MaxSteps = 50;
-	
+	float3 StartPos = Ray.Pos;
 	float RayTime = 0.01;
+	
 	for ( int s=0;	s<MaxSteps;	s++,Debug.StepCount++ )
 	{
 		vec3 Position = Ray.Pos + Ray.Dir * RayTime;
@@ -139,12 +183,39 @@ THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 		RayTime += HitDistance;
 		if ( HitDistance < CloseEnough )
 		{
-			Hit.HitPositionAndReflection.Pos = Position + Normal;
-			Hit.HitPositionAndReflection.Dir = Normal;
-			Hit.Colour = NormalToRedGreen( float(s)/float(MaxSteps) );
-			Hit.Colour = Normal;
-			Hit.Bounce = true;	//	shiny!
+			//	are we refracting?
+			//float RefractionScalar = 0.66;	//	for chromatic abberation, use r=0.65 g=0.66 b=0.67
+			vec3 Refracted = refract( normalize(Ray.Dir), normalize(Normal), RefractionScalar );
+			vec3 Reflected = reflect( normalize(Ray.Dir), normalize(Normal) );
+			float EdgeDot = (1.0-abs(dot(normalize(Ray.Dir),Normal)));
+			Refracted = Slerp( Refracted, Reflected, EdgeDot );
+			//Hit.Colour = NormalToRedGreen(EdgeDot);
+			Hit.Colour = float3(1,1,1);
+			
+			//	gr; use EdgeDot > 0.5 for reflecting light?
+			{
+				Hit.HitPositionAndReflection.Dir = Refracted;
+				Hit.HitPositionAndReflection.Pos = Position;
+				//	step ever so slightly past the edge so bounce doesnt start on edge
+				Hit.HitPositionAndReflection.Pos += Hit.HitPositionAndReflection.Dir;
+				//Hit.Colour = GetEnvironmentColour(Hit.HitPositionAndReflection.Dir);
+				Hit.Colour = float3(1,1,1);
+				Hit.Bounce = true;
+				//	test how far this ray has gone
+				//Hit.Colour = NormalToRedGreen( length(StartPos-Position)/25 );
+				//	difference in refraction
+				//Hit.Colour = NormalToRedGreen( length(-Normal-Refracted));
+			}
+
 			Hit.Hit = true;
+			
+			//	inside
+			if ( HitDistance < 0 )
+			{
+				Hit.Colour = float3(0,0,0);
+				Hit.Bounce = false;
+			}
+			
 			return Hit;
 		}
 		
@@ -185,7 +256,7 @@ THit GetSkyboxHit(TRay Ray,out TDebug Debug)
 //	returns intersction pos, w=success
 THit RayTraceScene(TRay Ray,out TDebug Debug)
 {
-#define BOUNCES	4
+#define BOUNCES	3
 	//	save last hit in case we exceed bounces
 	THit LastHit;
 	for (int Bounce=0;	Bounce<BOUNCES;	Bounce++)

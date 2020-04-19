@@ -6,6 +6,8 @@ Pop.Include = function(Filename)
 	return Pop.CompileAndRun( Source, Filename );
 }
 
+Pop.Include('PopEngineCommon/PromiseQueue.js');
+Pop.Include('PopEngineCommon/PopApi.js');
 Pop.Include('PopEngineCommon/PopShaderCache.js');
 Pop.Include('PopEngineCommon/PopFrameCounter.js');
 Pop.Include('PopEngineCommon/PopMath.js');
@@ -27,6 +29,11 @@ Window.OnMouseMove = function(x,y,MouseButton)
 	{
 		Camera.OnCameraOrbit(x,y,0,false);
 	}
+	if ( Camera && MouseButton == 1 )
+	{
+		const ZoomScale = 10;
+		Camera.OnCameraPanLocal(0,0,y*ZoomScale,false);
+	}
 }
 Window.OnMouseDown = function(x,y,MouseButton)
 {
@@ -34,6 +41,22 @@ Window.OnMouseDown = function(x,y,MouseButton)
 	if ( Camera && MouseButton == 0 )
 	{
 		Camera.OnCameraOrbit(x,y,0,true);
+	}
+	if ( Camera && MouseButton == 1 )
+	{
+		const ZoomScale = 10;
+		Camera.OnCameraPanLocal(0,0,y*ZoomScale,true);
+	}
+}
+Window.OnMouseScroll = function(x,y,Button,Delta)
+{
+	const Camera = GetCamera ? GetCamera() : null;
+	if ( Camera )
+	{
+		let Fly = Delta[1] * 50;
+		//Fly *= Params.ScrollFlySpeed;
+		Camera.OnCameraPanLocal( 0, 0, 0, true );
+		Camera.OnCameraPanLocal( 0, 0, Fly, false );
 	}
 }
 
@@ -44,6 +67,13 @@ let GetCamera = null;
 const Params = {};
 Params.ClearColour = [0.8,0.5,0.1];
 Params.FovVertical = 45;
+Params.RefractionScalar = 0.66;
+Params.MoonEdgeThickness = 0.0;
+
+const ParamsWindow = new Pop.ParamsWindow(Params,function(){});
+ParamsWindow.AddParam('RefractionScalar',0,1);
+ParamsWindow.AddParam('MoonEdgeThickness',0,1);
+
 
 function GameRender(RenderTarget)
 {
