@@ -160,6 +160,10 @@ function MeltGameRender(RenderTarget,GameState)
 	RenderTarget.DrawGeometry( Quad, Shader, SetUniforms );
 }
 
+//	I think I've forgotten to commit a version of the engine, temp async call
+if (!Pop.LoadFileAsStringAsync) Pop.LoadFileAsStringAsync = Pop.LoadFileAsString;
+if (!Pop.LoadFileAsImageAsync) Pop.LoadFileAsImageAsync = Pop.LoadFileAsImage;
+
 async function LoadAssets()
 {
 	const AssetFilenames =
