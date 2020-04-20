@@ -32,16 +32,28 @@ struct TDebug
 	int StepCount;
 };
 
+#define HIT_RESULT_MISS		0
+#define HIT_RESULT_ABSORB	1
+#define HIT_RESULT_REFRACT	2
+#define HIT_RESULT_REFLECT	3
+
 struct THit
 {
-	TRay HitPositionAndReflection;
-	bool Hit;
-	float Distance;
-	
+	TRay	Ray;	//	pos of ray is intersection pos
+	float3	SurfaceNormal;
+	int		HitResult;
+	float	Distance;
 	//	todo: how much light/colour was absorbed in this hit
-	bool Bounce;
-	float3 Colour;
+	float3	Colour;
 };
+bool Hit_IsMiss(THit Hit)
+{
+	return Hit.HitResult == HIT_RESULT_MISS;
+}
+bool Hit_IsHit(THit Hit)
+{
+	return !Hit_IsMiss(Hit);
+}
 
 vec3 ScreenToWorld(float2 uv,float z)
 {
@@ -247,6 +259,29 @@ bool refract(vec3 v,vec3 n,float ni_over_nt, out vec3 refracted)
 	}
 }
 
+
+TRay Hit_GetRefraction(THit Hit)
+{
+	//	gr: we can make all this generic. Get a distance (including -X when inside)
+	//		return a refrect option instead of bounce, then work this out to change the ray
+	//	gr: todo: do inside-distance stuff
+	
+	//float RefractionScalar = 0.66;	//	for chromatic abberation, use r=0.65 g=0.66 b=0.67
+	vec3 Refracted = refract( normalize(Hit.Ray.Dir), normalize(Hit.SurfaceNormal), RefractionScalar );
+	vec3 Reflected = reflect( normalize(Hit.Ray.Dir), normalize(Hit.SurfaceNormal) );
+	float EdgeDot = (1.0-abs(dot(normalize(Hit.Ray.Dir),Hit.SurfaceNormal)));
+	Refracted = Slerp( Refracted, Reflected, EdgeDot );
+	
+	TRay Reflection;
+	Reflection.Pos = Hit.Ray.Pos;
+	Reflection.Dir = Refracted;
+	
+	//	step ever so slightly past the edge so bounce doesnt start on edge
+	//	gr: move to scene bouncer?
+	Reflection.Pos += Reflection.Dir * BouncePastEdge;
+	return Reflection;
+}
+
 uniform float PlaneY;
 
 THit RayMarchPlane(TRay Ray,inout TDebug Debug)
@@ -273,29 +308,27 @@ THit RayMarchPlane(TRay Ray,inout TDebug Debug)
 	if (t < t_min || t > t_max)
 	{
 		THit Hit;
-		Hit.Hit = false;
-		Hit.Distance = 9999;
+		Hit.HitResult = HIT_RESULT_MISS;
 		return Hit;
 	}
 	
 	
 	
 	THit Hit;
-	Hit.Hit = true;
+	Hit.HitResult = HIT_RESULT_ABSORB;
 	Hit.Distance = t;
-	Hit.HitPositionAndReflection.Pos = GetRayPositionAtTime(Ray, t);
-	Hit.HitPositionAndReflection.Dir = PlaneNormal;
+	Hit.Ray = Ray;
+	Hit.Ray.Pos += Ray.Dir * t;
+	Hit.Ray.Dir = Ray.Dir;
+	Hit.SurfaceNormal = PlaneNormal;
 	Hit.Colour = float3(0,0,0);
-	Hit.Bounce = false;
-	//Hit.mat = PlaneMaterial;
-	//Hit.normal = PlaneNormal;
 
 	//	put holes in the floor
-	float2 xz = fract(Hit.HitPositionAndReflection.Pos.xz / 20);
+	float2 xz = fract(Hit.Ray.Pos.xz / 20);
 	bool Oddx = xz.x<0.5;
 	bool Oddy = xz.y<0.5;
 	if ( Oddx == Oddy )
-		Hit.Hit = false;
+		Hit.HitResult = HIT_RESULT_REFLECT;
 	
 	return Hit;
 }
@@ -304,6 +337,7 @@ THit RayMarchPlane(TRay Ray,inout TDebug Debug)
 THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 {
 	THit Hit;
+	Hit.HitResult = HIT_RESULT_MISS;
 	
 	//	dont need to march here, but its fine for now
 	const float MinDistance = 0.001;
@@ -328,43 +362,19 @@ THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 			//	gr: if we calc the normal too close to the surface, we get (I think) some nan/0 normals. Too far away and its not fine enough!
 			//	just need a tiny tiny offset!
 			//float3 Normal = DistanceToMoonNormal( mix(Position,Ray.Pos,NormalViaRayStart) );
-			float3 Normal = DistanceToMoonNormal( Position-Ray.Dir*NormalViaRayStart );
+			Hit.SurfaceNormal = DistanceToMoonNormal( Position-Ray.Dir*NormalViaRayStart );
+			Hit.Ray.Pos = Position;
+			Hit.Ray.Dir = Ray.Dir;
 			
-			//	gr: we can make all this generic. Get a distance (including -X when inside)
-			//		return a refrect option instead of bounce, then work this out to change the ray
-
-			//float RefractionScalar = 0.66;	//	for chromatic abberation, use r=0.65 g=0.66 b=0.67
-			vec3 Refracted = refract( normalize(Ray.Dir), normalize(Normal), RefractionScalar );
-			vec3 Reflected = reflect( normalize(Ray.Dir), normalize(Normal) );
-			float EdgeDot = (1.0-abs(dot(normalize(Ray.Dir),Normal)));
-			Refracted = Slerp( Refracted, Reflected, EdgeDot );
-
-			//Hit.Colour = NormalToRedGreen(EdgeDot);
 			Hit.Colour = float3(1,1,1);
-			Hit.Hit = true;
+			Hit.HitResult = HIT_RESULT_REFRACT;
 			Hit.Distance = length(Position - Ray.Pos);
 
-			//	gr; use EdgeDot > 0.5 for reflecting light?
-			{
-				Hit.HitPositionAndReflection.Dir = Refracted;
-				Hit.HitPositionAndReflection.Pos = Position;
-				
-				//	step ever so slightly past the edge so bounce doesnt start on edge
-				//	move this to generic code
-				Hit.HitPositionAndReflection.Pos += Hit.HitPositionAndReflection.Dir * BouncePastEdge;
-				//Hit.Colour = GetEnvironmentColour(Hit.HitPositionAndReflection.Dir);
-				Hit.Bounce = true;
-				//	test how far this ray has gone
-				//Hit.Colour = NormalToRedGreen( length(StartPos-Position)/25 );
-				//	difference in refraction
-				//Hit.Colour = NormalToRedGreen( length(-Normal-Refracted));
-			}
-			
 			//	inside
 			if ( HitDistance < 0 )
 			{
 				Hit.Colour = float3(0,0,0);
-				Hit.Bounce = false;
+				Hit.HitResult = HIT_RESULT_ABSORB;
 			}
 			
 			return Hit;
@@ -374,16 +384,14 @@ THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 			break;//return float4(Position,0);
 	}
 	
-	Hit.Hit = false;
 	return Hit;
 }
 
 THit AllocHit(TRay StartRay)
 {
 	THit NewHit;
-	NewHit.HitPositionAndReflection = StartRay;
-	NewHit.Hit = false;
-	NewHit.Bounce = false;
+	NewHit.Ray = StartRay;
+	NewHit.HitResult = HIT_RESULT_MISS;
 	return NewHit;
 }
 
@@ -396,8 +404,8 @@ THit RayMarchScene(TRay Ray,inout TDebug Debug)
 	THit Hit1 = RayMarchPlane( Ray0, Debug );
 	THit Hit0 = RayMarchSphere( Ray1, Debug );
 
-	Hit0.Distance = Hit0.Hit ? Hit0.Distance : 999;
-	Hit1.Distance = Hit1.Hit ? Hit1.Distance : 999;
+	Hit0.Distance = Hit_IsHit(Hit0) ? Hit0.Distance : 999;
+	Hit1.Distance = Hit_IsHit(Hit1) ? Hit1.Distance : 999;
 
 	if ( Hit0.Distance < Hit1.Distance )
 		return Hit0;
@@ -408,8 +416,9 @@ THit RayMarchScene(TRay Ray,inout TDebug Debug)
 THit GetSkyboxHit(TRay Ray,out TDebug Debug)
 {
 	THit Hit;
-	Hit.Hit = true;
-	Hit.Bounce = false;
+	Hit.Ray = Ray;
+	Hit.SurfaceNormal = Ray.Dir;
+	Hit.HitResult = HIT_RESULT_ABSORB;
 	Hit.Colour = GetEnvironmentColour( Ray.Dir );
 	return Hit;
 }
@@ -430,7 +439,7 @@ THit RayTraceScene(TRay Ray,out TDebug Debug)
 		if ( Bounce == 0 )
 			FirstHit = NewHit;
 
-		if ( !NewHit.Hit )
+		if ( Hit_IsMiss(NewHit) )
 		{
 			//	didn't hit on first bounce = miss
 			if ( Bounce == 0 )
@@ -438,20 +447,34 @@ THit RayTraceScene(TRay Ray,out TDebug Debug)
 		
 			//	this was a bounce, hit the sky box
 			NewHit = GetSkyboxHit(Ray,Debug);
+			//	restore original hit depth
 			NewHit.Distance = FirstHit.Distance;
 			return NewHit;
 		}
 		
-		if ( NewHit.Bounce )
+		if ( NewHit.HitResult == HIT_RESULT_REFLECT )
 		{
 			//	save in case it's the last bounce
 			LastHit = NewHit;
 
-			//	reflect
-			Ray = NewHit.HitPositionAndReflection;
+			//	reflect - todo may need to step away from surface like in refraction
+			Ray.Pos = NewHit.Ray.Pos;
+			//Ray.Dir = reflect( normalize(NewHit.Ray.Dir), normalize(-NewHit.SurfaceNormal) );
+			Ray.Dir = NewHit.SurfaceNormal;
 			continue;
 		}
-	
+		
+		if ( NewHit.HitResult == HIT_RESULT_REFRACT )
+		{
+			//	save in case it's the last bounce
+			LastHit = NewHit;
+			
+			//	reflect
+			Ray = Hit_GetRefraction(NewHit);
+			continue;
+		}
+		
+		//	abosrb
 		//	hit surface, ray stops here
 		//	gr: break & LastHit isn't returning properly
 		NewHit.Distance = FirstHit.Distance;
@@ -478,7 +501,7 @@ void main()
 		gl_FragColor = float4(1,0,0,1);
 	return;
 */
-	float4 SceneColour = float4( SceneHit.Colour, SceneHit.Hit ? 1.0 : 0.0 );
+	float4 SceneColour = float4( SceneHit.Colour, Hit_IsHit(SceneHit) ? 1.0 : 0.0 );
 	/*
 	float StepHeat =
 	float4 SphereColour = RayMarchSphere( Ray, StepHeat );
@@ -488,7 +511,7 @@ void main()
 	Colour = mix( Colour, SceneColour, SceneColour.w );
 	gl_FragColor = Colour;
 	
-	if ( ShowDepth && SceneHit.Hit )
+	if ( ShowDepth && Hit_IsHit(SceneHit) )
 	{
 		float DistanceNorm = SceneHit.Distance/ShowDepthFar;
 		gl_FragColor = float4( DistanceNorm,DistanceNorm,DistanceNorm,1.0);
