@@ -3,13 +3,13 @@ precision highp float;
 in vec2 uv;
 uniform mat4 ScreenToCameraTransform;
 uniform mat4 CameraToWorldTransform;
-uniform bool DrawStepHeat = false;
+uniform bool DrawStepHeat;
 uniform bool ShowDepth;
 uniform float ShowDepthFar;
 uniform float PassJitter;
 
 //	materials
-uniform float RefractionScalar = 0.66;
+uniform float RefractionScalar;// = 0.66;
 uniform float Time;
 uniform float TimeMult;
 uniform sampler2D EnviromentMapEquirect;
@@ -17,7 +17,7 @@ uniform sampler2D NoiseTexture;
 
 //	shapes
 const float4 MoonSphere = float4(0,0,0,5);
-uniform float MoonEdgeThickness = 0.2;
+uniform float MoonEdgeThickness;
 uniform float MoonEdgeThicknessNoiseFreq;
 uniform float MoonEdgeThicknessNoiseScale;
 uniform float PlaneY;
@@ -182,12 +182,12 @@ float GetMoonEdgeThickness(vec3 Position)
 	//float Offset = sin(Offsetxy.x*MoonEdgeThicknessNoiseFreq) * cos(Offsetxy.y*MoonEdgeThicknessNoiseFreq);
 	float OffsetX = sin(Position.x*MoonEdgeThicknessNoiseFreq);
 	float OffsetY = cos(Position.y*MoonEdgeThicknessNoiseFreq);
-	float OffsetZ = 1;//cos(Position.z*MoonEdgeThicknessNoiseFreq);
+	float OffsetZ = 1.0;//cos(Position.z*MoonEdgeThicknessNoiseFreq);
 	float Offset = OffsetX * OffsetY * OffsetZ;
 	
 	//float Offset = sin( Position.x*MoonEdgeThicknessNoiseFreq);// * cos(Position.y*MoonEdgeThicknessNoiseFreq);
 	
-	Thickness *= 1 + (Offset * MoonEdgeThicknessNoiseScale);
+	Thickness *= 1.0 + (Offset * MoonEdgeThicknessNoiseScale);
 	return Thickness;
 }
 
@@ -249,7 +249,7 @@ float DistanceToMoonShape(float3 Position)
 float3 sdBoxNormal(vec3 p,vec3 b)
 {
 	const float eps = 0.0001; // or some other value
-	const vec2 h = vec2(eps,0);
+	const vec2 h = vec2(eps,0.0);
 	return normalize( vec3(sdBox(p+h.xyy,b) - sdBox(p-h.xyy,b),
 						   sdBox(p+h.yxy,b) - sdBox(p-h.yxy,b),
 						   sdBox(p+h.yyx,b) - sdBox(p-h.yyx,b) ) );
@@ -352,7 +352,7 @@ THit RayMarchPlane(TRay Ray,inout TDebug Debug)
 	}
 	*/
 	float t_min = 0.001;
-	float t_max = 9999;
+	float t_max = 99999.0;
 	if (t < t_min || t > t_max)
 	{
 		THit Hit;
@@ -398,8 +398,9 @@ THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 	float3 StartPos = Ray.Pos;
 	float RayTime = 0.01;
 	
-	for ( int s=0;	s<MaxSteps;	s++,Debug.StepCount++ )
+	for ( int s=0;	s<MaxSteps;	s++ )
 	{
+		Debug.StepCount++;
 		vec3 Position = Ray.Pos + Ray.Dir * RayTime;
 		float MoonDistance = DistanceToMoonShape( Position );
 		float HitDistance = MoonDistance;
@@ -422,7 +423,7 @@ THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 			Hit.Distance = length(Position - Ray.Pos);
 
 			//	inside
-			if ( HitDistance < 0 )
+			if ( HitDistance < 0.0 )
 			{
 				Hit.Colour = float3(0,0,0);
 				Hit.HitResult = HIT_RESULT_ABSORB;
@@ -450,10 +451,15 @@ THit RayMarchScene(TRay Ray,inout TDebug Debug)
 	THit Hit1 = RayMarchPlane( Ray, Debug );
 	THit Hit0 = RayMarchSphere( Ray, Debug );
 	//Hit0.HitResult = HIT_RESULT_MISS;
-	Hit0.Distance = Hit_IsHit(Hit0) ? Hit0.Distance : 999;
-	Hit1.Distance = Hit_IsHit(Hit1) ? Hit1.Distance : 999;
+	Hit0.Distance = Hit_IsHit(Hit0) ? Hit0.Distance : 999999.0;
+	Hit1.Distance = Hit_IsHit(Hit1) ? Hit1.Distance : 999999.0;
 
-	return ( Hit0.Distance < Hit1.Distance ) ? Hit0 : Hit1;
+	//	no tenary on web
+	//return ( Hit0.Distance < Hit1.Distance ) ? Hit0 : Hit1;
+	if ( Hit0.Distance < Hit1.Distance )
+		return Hit0;
+	else
+		return Hit1;
 }
 
 THit GetSkyboxHit(TRay Ray,out TDebug Debug)
@@ -474,7 +480,7 @@ THit RayTraceScene(TRay Ray,out TDebug Debug)
 	THit LastHit;
 	//	should also be saving details about the first hit, as thats the actual surface
 	//THit FirstHit;
-	float FirstHitDistance = 999;
+	float FirstHitDistance = 999.0;
 	
 	for (int Bounce=0;	Bounce<BOUNCES;	Bounce++)
 	{
@@ -544,6 +550,7 @@ void main()
 	SceneColour = mix( EnvColour, SceneColour, SceneColour.w );
 
 	//	gr: rubbish AND slow
+	/*
 #define PASSES	0
 	float2 Jitter[4];//PASSES];
 	Jitter[0] = float2( PassJitter*-0.5, PassJitter*-0.5 );
@@ -562,7 +569,7 @@ void main()
 		SceneColour.xyz = mix( SceneColour.xyz, SceneHit2.Colour, Hitw*0.5 );
 	}
 #endif
-	
+	*/
 	gl_FragColor = SceneColour;
 	
 	if ( ShowDepth && Hit_IsHit(SceneHit) )
