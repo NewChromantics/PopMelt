@@ -162,7 +162,15 @@ async function LoadAssets()
 	[
 	 SceneRenderShaderFilename,
 	 'Quad.vert.glsl'
-	];
+	 ];
+
+	//	for web... maybe this can go now?
+	if ( Pop.AsyncCacheAssetAsString )
+	{
+		const CacheAssetPromises = AssetFilenames.map( Pop.AsyncCacheAssetAsString );
+		await Promise.all(CacheAssetPromises);
+	}
+	
 	const AssetPromises = AssetFilenames.map( Pop.LoadFileAsStringAsync );
 	await Promise.all(AssetPromises);
 	return true;

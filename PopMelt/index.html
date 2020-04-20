@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Melt</title>
+	<link href="https://fonts.googleapis.com/css2?family=Karla:wght@400;700&display=swap" rel="stylesheet">
+	<link rel="stylesheet" type="text/css" href="Web/Editor/win95.css" />
+	<link rel="stylesheet" type="text/css" href="Web/Style.css" />
+
+	<!-- this fixes chrome (not a problem in safari) from zooming in when switching between landscape and portrait on ios
+		https://stackoverflow.com/a/4389976/355753
+		Also seems okay in chrome on pixel3
+		-->
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+<style>
+</style>
+</head>
+
+
+<body>
+	<div class="CanvasContainer">
+		<canvas id="Melt"></canvas>
+	</div>
+	
+	<div id="AppError">
+	</div>
+	
+	<!-- preload engine files which also makes them easier to deal with in dev tools -->
+	<script src='PopEngineCommon/PromiseQueue.js'></script>
+	<script src='PopEngineCommon/PopWebApi.js'></script>
+	<script src='PopEngineCommon/PopApi.js'></script>
+	<script src='PopEngineCommon/PopWebOpenglApi.js'></script>
+	<script src='PopEngineCommon/PopWebGuiApi.js'></script>
+	<script src='PopEngineCommon/PopWebImageApi.js'></script>
+	<script src='PopEngineCommon/PopWebSocketApi.js'></script>
+	<script src='PopEngineCommon/PopWebXrApi.js'></script>
+
+	<script src='PopEngineCommon/PopSvg.js'></script>
+	<script src='PopEngineCommon/PopMath.js'></script>
+	<script src='PopEngineCommon/ParamsWindow.js'></script>
+	<script src='PopEngineCommon/PopFrameCounter.js'></script>
+	<script>
+
+		async function Bootup()
+		{
+			const PreloadAssets =
+			[
+				'bootup.js',
+				'AssetManager.js',
+				'PopEngineCommon/PromiseQueue.js',
+				'PopEngineCommon/PopApi.js',
+				'PopEngineCommon/PopShaderCache.js',
+				'PopEngineCommon/PopFrameCounter.js',
+				'PopEngineCommon/PopMath.js',
+			 	'PopEngineCommon/ParamsWindow.js',
+				'PopEngineCommon/PopCamera.js',
+			];
+			const PreloadPromises = PreloadAssets.map(Pop.AsyncCacheAssetAsString);
+			await Promise.all( PreloadPromises );
+
+			let BootupFilename = 'bootup.js';
+			const Source = await Pop.LoadFileAsStringAsync(BootupFilename);
+			Pop.CompileAndRun( Source, BootupFilename );
+		}
+
+		Pop.Error = function(ErrorString)
+		{
+			if (ErrorString instanceof Error)
+				ErrorString = ErrorString.toString();
+			if (typeof ErrorString != 'string')
+				ErrorString = JSON.stringify(ErrorString);
+			const ErrorElement = document.querySelector('#AppError');
+			ErrorElement.innerText += '\n';
+			ErrorElement.innerText += ErrorString;
+			ErrorElement.style.visibility = "visible";
+			
+			//	gr: if I throw here, will the app stop?
+		}
+	
+		Bootup().then(Pop.Debug("Bootup Finished")).catch( Pop.Error );
+	
+	</script>
+	
+</body>
+</html>
