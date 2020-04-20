@@ -172,14 +172,15 @@ function MeltGameRender(RenderTarget,GameState)
 			function RenderEye(RenderTarget)
 			{
 				const Colours = [[1,0,0],[0,1,0],[0,0,1]];
-				RenderTarget.ClearColour(...Colours[CameraIndex]);
+				//RenderTarget.ClearColour(...Colours[CameraIndex]);
 				RenderScene(RenderTarget,Camera,Runtime);
 			}
 			RenderTarget.RenderToRenderTarget(RenderTexture,RenderEye);
 		}
 		else
 		{
-			//RenderScene(RenderTarget,Camera,Runtime);
+			//	sometimes this doesnt render?
+			RenderScene(RenderTarget,Camera,Runtime);
 		}
 
 		if (Camera.OnFinishedRender)
@@ -298,7 +299,7 @@ AppLoop().then( Pop.ExitApp ).catch(Pop.Debug);
 
 function OnNewPoses(Poses,CameraLeft,CameraRight)
 {
-	Pop.Debug("Poses",JSON.stringify(Poses.Devices));
+	//Pop.Debug("Poses",JSON.stringify(Poses.Devices));
 	function ValidDevice(Device)
 	{
 		return Device.IsConnected;
@@ -337,7 +338,7 @@ function OnNewPoses(Poses,CameraLeft,CameraRight)
 	UpdateEye(CameraRight,"TrackedDeviceClass_HMD_RightEye");
 
 	//	update camera
-	Pop.Debug("Poses",JSON.stringify(Poses.Devices));
+	//Pop.Debug("Poses",JSON.stringify(Poses.Devices));
 }
 
 async function XrLoop()
