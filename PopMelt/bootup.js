@@ -81,6 +81,7 @@ Params.PlaneY = -10;
 Params.ShowDepth = false;
 Params.ShowDepthFar = 30;
 Params.PassJitter = 0.001;
+Params.FloorTileSize = 10;
 
 const ParamsWindow = new Pop.ParamsWindow(Params,function(){});
 ParamsWindow.AddParam('RefractionScalar',0,1);
@@ -94,6 +95,7 @@ ParamsWindow.AddParam('PlaneY',-50,50);
 ParamsWindow.AddParam('ShowDepth');
 ParamsWindow.AddParam('ShowDepthFar',1,50);
 ParamsWindow.AddParam('PassJitter',0.0001,0.01);
+ParamsWindow.AddParam('FloorTileSize',0,100);
 
 
 

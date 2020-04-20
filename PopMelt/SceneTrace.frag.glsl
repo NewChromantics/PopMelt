@@ -14,6 +14,7 @@ uniform float Time;
 uniform float TimeMult;
 uniform sampler2D EnviromentMapEquirect;
 uniform sampler2D NoiseTexture;
+uniform float FloorTileSize;
 
 //	shapes
 const float4 MoonSphere = float4(0,0,0,5);
@@ -372,7 +373,7 @@ THit RayMarchPlane(TRay Ray,inout TDebug Debug)
 	Hit.Colour = float3(0,0,0);
 
 	//	put holes in the floor
-	float SquareSize = 8.0;
+	float SquareSize = FloorTileSize;
 	float2 xz = fract(Hit.Ray.Pos.xz / (SquareSize*2.0));
 	bool Oddx = xz.x<0.5;
 	bool Oddy = xz.y<0.5;
