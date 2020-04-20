@@ -197,6 +197,13 @@ float sdBox( vec3 p, vec3 b)
 	return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
 }
 
+float opSmoothUnion( float d1, float d2, float k )
+{
+	float h = clamp( 0.5 + 0.5*(d2-d1)/k, 0.0, 1.0 );
+	return mix( d2, d1, h ) - k*h*(1.0-h);
+	
+}
+
 float DistanceToMoonShape(float3 Position)
 {
 	bool UseBox = true;
@@ -206,7 +213,7 @@ float DistanceToMoonShape(float3 Position)
 	if ( UseBox )
 	{
 		float3 BoxPos = MoonSphere.xyz;
-		float3 BoxSize = float3(MoonSphere.w*0.5,MoonSphere.w*0.7,MoonSphere.w*0.8);
+		float3 BoxSize = float3(MoonSphere.w*0.5,MoonSphere.w*0.8,MoonSphere.w*1.5);
 		LocalPosition = Position-BoxPos;
 		Distance = sdBox( LocalPosition, BoxSize );
 	}
@@ -217,6 +224,18 @@ float DistanceToMoonShape(float3 Position)
 		float3 DeltaToCenter = MoonSphere.xyz - Position;
 		Distance = length( DeltaToCenter ) - MoonRadius;
 	}
+	
+	bool AndSphere = true;
+	if ( AndSphere )
+	{
+		float MoonRadius = MoonSphere.w;
+		LocalPosition = Position - MoonSphere.xyz;
+		float3 DeltaToCenter = MoonSphere.xyz - Position;
+		float SphereDistance = length( DeltaToCenter ) - MoonRadius;
+		//Distance = min(SphereDistance,Distance);
+		Distance = opSmoothUnion( SphereDistance, Distance, 1.01 );
+	}
+	
 	Distance -= GetMoonEdgeThickness(LocalPosition);
 	
 	//	distance edge rather than solid
