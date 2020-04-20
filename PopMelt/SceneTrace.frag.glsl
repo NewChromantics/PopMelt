@@ -15,6 +15,7 @@ uniform float TimeMult;
 uniform sampler2D EnviromentMapEquirect;
 uniform sampler2D NoiseTexture;
 uniform float FloorTileSize;
+uniform bool RenderEnvironmentSkybox;
 
 //	shapes
 const float4 MoonSphere = float4(0,0,0,5);
@@ -150,12 +151,15 @@ float3 GetEnvironmentColour(float3 View,inout TDebug Debug)
 {
 	float2 uv = ViewToEquirect(View);
 	
-	//	this texture sample kills, but we only ever do it once! texture must be inefficient
-	//float3 Rgb = texture2D( EnviromentMapEquirect, uv ).xyz;
-	float3 Rgb = float3(0.5,0.5,0.5);
-	
+	float3 Rgb = float3(1.0,1.0,1.0);
+	if (RenderEnvironmentSkybox)
+	{
+		//	this texture sample kills, but we only ever do it once! texture must be inefficient
+		Rgb = texture2D(EnviromentMapEquirect, uv).xyz;
+	}
+
 	//	procedural ish
-	float3 ViewRgb = (View + float3(1,1,1) ) * 0.5;
+	float3 ViewRgb = (View + float3(1,1,1) ) * 0.5;	//	[-1.1] -> [0..1]
 	Rgb = mix( Rgb, ViewRgb, 0.5 );
 	
 	//	debug samples
