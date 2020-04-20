@@ -18,7 +18,7 @@ uniform float FloorTileSize;
 uniform bool RenderEnvironmentSkybox;
 
 //	shapes
-const float4 MoonSphere = float4(0,0,0,5);
+const float4 MoonSphere = float4(0,0,-4,0.5);
 uniform float MoonEdgeThickness;
 uniform float MoonEdgeThicknessNoiseFreq;
 uniform float MoonEdgeThicknessNoiseScale;
@@ -230,7 +230,7 @@ float DistanceToMoonShape(float3 Position)
 		Distance = length( DeltaToCenter ) - MoonRadius;
 	}
 	
-	bool AndSphere = true;
+	bool AndSphere = false;
 	if ( AndSphere )
 	{
 		float MoonRadius = MoonSphere.w;

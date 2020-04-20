@@ -166,7 +166,24 @@ function MeltGameRender(RenderTarget,GameState)
 
 	function RenderCamera(Camera,CameraIndex)
 	{
-		RenderScene(RenderTarget,Camera,Runtime);
+		const RenderTexture = Camera.RenderTexture;
+		if (RenderTexture)
+		{
+			function RenderEye(RenderTarget)
+			{
+				const Colours = [[1,0,0],[0,1,0],[0,0,1]];
+				RenderTarget.ClearColour(...Colours[CameraIndex]);
+				RenderScene(RenderTarget,Camera,Runtime);
+			}
+			RenderTarget.RenderToRenderTarget(RenderTexture,RenderEye);
+		}
+		else
+		{
+			//RenderScene(RenderTarget,Camera,Runtime);
+		}
+
+		if (Camera.OnFinishedRender)
+			Camera.OnFinishedRender();
 	}
 	Cameras.forEach(RenderCamera);
 }
@@ -276,3 +293,93 @@ async function AppLoop()
 }
 
 AppLoop().then( Pop.ExitApp ).catch(Pop.Debug);
+
+
+
+function OnNewPoses(Poses,CameraLeft,CameraRight)
+{
+	Pop.Debug("Poses",JSON.stringify(Poses.Devices));
+	function ValidDevice(Device)
+	{
+		return Device.IsConnected;
+	}
+	Poses.Devices = Poses.Devices.filter(ValidDevice);
+
+	if (!Poses.Devices.length)
+		return;
+
+	function UpdateEye(Camera,Class)
+	{
+		function IsEyeClass(Device)
+		{
+			if (!Device.IsValidPose)
+				return false;
+			return Device.Class == Class;
+		}
+
+		const EyeDevice = Poses.Devices.find(IsEyeClass);
+		if (!EyeDevice)
+		{
+			Pop.Debug(`Didnt find eye device ${Class}`);
+			return;
+		}
+		
+		Camera.GetWorldToCameraMatrix = function ()
+		{
+			const WorldToLocal = Math.MatrixInverse4x4(EyeDevice.LocalToWorld);
+			//Pop.Debug("GetLocalToWorldMatrix",Hmd.LocalToWorld);
+			return WorldToLocal;
+		}
+		Camera.ProjectionMatrix = EyeDevice.ProjectionMatrix;
+	}
+
+	UpdateEye(CameraLeft,"TrackedDeviceClass_HMD_LeftEye");
+	UpdateEye(CameraRight,"TrackedDeviceClass_HMD_RightEye");
+
+	//	update camera
+	Pop.Debug("Poses",JSON.stringify(Poses.Devices));
+}
+
+async function XrLoop()
+{
+	const Hmd = new Pop.Openvr.Hmd("Device Name");
+	const PoseCounter = new Pop.FrameCounter("HMD poses");
+
+	//	make textures for eyes
+	const ImageWidth = 1512;
+	const ImageHeight = 1680;
+	const HmdLeft = new Pop.Image();
+	const HmdRight = new Pop.Image();
+	//	need to do this so when using as a render target, it has a size
+	const InitPixels = new Uint8Array(ImageWidth * ImageHeight * 4);	
+	HmdLeft.WritePixels(ImageWidth,ImageHeight,InitPixels,'RGBA');
+	HmdRight.WritePixels(ImageWidth,ImageHeight,InitPixels,'RGBA');
+
+	let HmdCameraLeft = new Pop.Camera();
+	let HmdCameraRight = new Pop.Camera();
+	HmdCameraLeft.RenderTexture = HmdLeft;
+	HmdCameraRight.RenderTexture = HmdRight;
+	HmdCameraLeft.Name = "Left";
+	HmdCameraRight.Name = "Right";
+	Cameras.push(HmdCameraLeft);
+	Cameras.push(HmdCameraRight);
+
+	HmdCameraRight.OnFinishedRender = function()
+	{
+		Hmd.SubmitFrame(HmdCameraLeft.RenderTexture,HmdCameraRight.RenderTexture);
+	}
+
+	while (true)
+	{
+		//	gr: current setup, this wont resolve until we've submitted a frame
+		const PoseStates = await Hmd.WaitForPoses();
+		//Pop.Debug("Got new poses" + JSON.stringify(PoseStates));
+		PoseCounter.Add();
+
+		OnNewPoses(PoseStates,HmdCameraLeft,HmdCameraRight);		
+	}
+}
+
+//	try and run a vr/ar interface
+XrLoop().then(Pop.Debug).catch(Pop.Debug);
+

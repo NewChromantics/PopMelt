@@ -203,9 +203,6 @@
     <Image Include="..\Source_Windows\PopMelt.ico" />
   </ItemGroup>
   <ItemGroup>
-    <CopyFileToFolders Include="..\Build\PopEngine_Debug_Chakra_x64\PopCameraDevice.dll">
-      <FileType>Document</FileType>
-    </CopyFileToFolders>
     <CopyFileToFolders Include="..\Build\PopEngine_Debug_Chakra_x64\PopEngine.dll">
       <FileType>Document</FileType>
     </CopyFileToFolders>
@@ -416,6 +413,14 @@
       <DestinationFolders Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(OutDir)\PopMelt</DestinationFolders>
       <DestinationFolders Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)\PopMelt</DestinationFolders>
       <DestinationFolders Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)\PopMelt</DestinationFolders>
+    </CopyFileToFolders>
+  </ItemGroup>
+  <ItemGroup>
+    <CopyFileToFolders Include="..\Source_Windows\openvr_api.dll">
+      <FileType>Document</FileType>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Source_Windows\PopCameraDevice.dll">
+      <FileType>Document</FileType>
     </CopyFileToFolders>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

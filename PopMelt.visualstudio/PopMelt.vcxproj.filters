@@ -134,11 +134,16 @@
     <CopyFileToFolders Include="..\PopMelt\PopEngineCommon\Readme.md">
       <Filter>PopMelt\PopEngineCommon</Filter>
     </CopyFileToFolders>
-    <CopyFileToFolders Include="..\Build\PopEngine_Debug_Chakra_x64\PopCameraDevice.dll">
-      <Filter>Dlls</Filter>
-    </CopyFileToFolders>
     <CopyFileToFolders Include="..\Build\PopEngine_Debug_Chakra_x64\PopEngine.dll">
       <Filter>Dlls</Filter>
     </CopyFileToFolders>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\Source_Windows\openvr_api.dll">
+      <Filter>Dlls</Filter>
+    </None>
+    <None Include="..\Source_Windows\PopCameraDevice.dll">
+      <Filter>Dlls</Filter>
+    </None>
   </ItemGroup>
 </Project>
