@@ -299,17 +299,19 @@ vec3 Slerp(vec3 p0, vec3 p1, float t)
 	return P;
 }
 
-bool refract(vec3 v,vec3 n,float ni_over_nt, out vec3 refracted)
+vec3 refract(vec3 v,vec3 n,float ni_over_nt)
 {
 	vec3 uv = normalize(v);
 	float dt = dot(uv, n);
 	float discriminant = 1.0 - ni_over_nt * ni_over_nt * (1.0 - dt * dt);
 	if (discriminant > 0.0)
 	{
-		refracted = ni_over_nt * (uv - n * dt) - n * sqrt(discriminant);
-		return true;
-	} else {
-		return false;
+		float3 refracted = ni_over_nt * (uv - n * dt) - n * sqrt(discriminant);
+		return refracted;
+	}
+	else
+	{
+		return n;
 	}
 }
 
