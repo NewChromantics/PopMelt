@@ -299,7 +299,11 @@ vec3 Slerp(vec3 p0, vec3 p1, float t)
 	return P;
 }
 
-vec3 refract(vec3 v,vec3 n,float ni_over_nt)
+//	some platforms have refract()
+#define refract2	refract
+
+#if !defined(refract2)
+vec3 refract2(vec3 v,vec3 n,float ni_over_nt)
 {
 	vec3 uv = normalize(v);
 	float dt = dot(uv, n);
@@ -314,6 +318,7 @@ vec3 refract(vec3 v,vec3 n,float ni_over_nt)
 		return n;
 	}
 }
+#endif
 
 
 TRay Hit_GetRefraction(THit Hit)
@@ -323,7 +328,7 @@ TRay Hit_GetRefraction(THit Hit)
 	//	gr: todo: do inside-distance stuff
 	
 	//float RefractionScalar = 0.66;	//	for chromatic abberation, use r=0.65 g=0.66 b=0.67
-	vec3 Refracted = refract( normalize(Hit.Ray.Dir), normalize(Hit.SurfaceNormal), RefractionScalar );
+	vec3 Refracted = refract2( normalize(Hit.Ray.Dir), normalize(Hit.SurfaceNormal), RefractionScalar );
 	vec3 Reflected = reflect( normalize(Hit.Ray.Dir), normalize(Hit.SurfaceNormal) );
 	float EdgeDot = (1.0-abs(dot(normalize(Hit.Ray.Dir),Hit.SurfaceNormal)));
 	Refracted = Slerp( Refracted, Reflected, EdgeDot );
