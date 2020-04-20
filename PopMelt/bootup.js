@@ -6,7 +6,7 @@ Pop.Include = function(Filename)
 	return Pop.CompileAndRun( Source, Filename );
 }
 
-Pop.Include('PopEngineCommon/PromiseQueue.js');
+//Pop.Include('PopEngineCommon/PromiseQueue.js');
 Pop.Include('PopEngineCommon/PopApi.js');
 Pop.Include('PopEngineCommon/PopShaderCache.js');
 Pop.Include('PopEngineCommon/PopFrameCounter.js');
