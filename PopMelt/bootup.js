@@ -27,7 +27,8 @@ Window.OnRender = GameRender;
 
 Window.OnMouseMove = function(x,y,MouseButton)
 {
-	const Camera = GetCamera ? GetCamera() : null;
+	const Camera = UserCamera;
+
 	if ( Camera && MouseButton == 0 )
 	{
 		Camera.OnCameraOrbit(x,y,0,false);
@@ -40,7 +41,8 @@ Window.OnMouseMove = function(x,y,MouseButton)
 }
 Window.OnMouseDown = function(x,y,MouseButton)
 {
-	const Camera = GetCamera ? GetCamera() : null;
+	const Camera = UserCamera;
+
 	if ( Camera && MouseButton == 0 )
 	{
 		Camera.OnCameraOrbit(x,y,0,true);
@@ -53,8 +55,9 @@ Window.OnMouseDown = function(x,y,MouseButton)
 }
 Window.OnMouseScroll = function(x,y,Button,Delta)
 {
-	const Camera = GetCamera ? GetCamera() : null;
-	if ( Camera )
+	const Camera = UserCamera;
+
+	if (Camera)
 	{
 		let Fly = Delta[1] * 50;
 		//Fly *= Params.ScrollFlySpeed;
@@ -63,8 +66,9 @@ Window.OnMouseScroll = function(x,y,Button,Delta)
 	}
 }
 
-let GetCamera = null;
 
+let Cameras = [];
+let UserCamera = null;
 
 
 const Params = {};
@@ -114,38 +118,31 @@ let RenderGameFunc = null;
 
 const StartTime = Pop.GetTimeNowMs();
 
-function MeltGameRender(RenderTarget,GameState)
+
+function RenderScene(RenderTarget,Camera,Runtime)
 {
-	const State = GameState.State;
-	const Runtime = GameState.Runtime;
-	RenderTarget.ClearColour(...Params.ClearColour);
-	
-	Runtime.Camera.FovVertical = Params.FovVertical;
-	GetCamera = function()	{	return Runtime.Camera;	}
-	
 	const Quad = GetAsset('Quad',RenderTarget);
 	const Shader = GetAsset(Runtime.SceneShader,RenderTarget);
-	const Camera = Runtime.Camera;
-	
+
 	const EnviromentMapEquirect = Runtime.EnvironmentMapFile;
 	const NoiseTexture = Runtime.NoiseTexture;
 
 	const WorldToCameraMatrix = Camera.GetWorldToCameraMatrix();
-	const CameraProjectionMatrix = Camera.GetProjectionMatrix( RenderTarget.GetScreenRect() );
-	const ScreenToCameraTransform = Math.MatrixInverse4x4( CameraProjectionMatrix );
-	const CameraToWorldTransform = Math.MatrixInverse4x4( WorldToCameraMatrix );
+	const CameraProjectionMatrix = Camera.GetProjectionMatrix(RenderTarget.GetScreenRect());
+	const ScreenToCameraTransform = Math.MatrixInverse4x4(CameraProjectionMatrix);
+	const CameraToWorldTransform = Math.MatrixInverse4x4(WorldToCameraMatrix);
 	const LocalToWorldTransform = Camera.GetLocalToWorldFrustumTransformMatrix();
 	//const LocalToWorldTransform = Math.CreateIdentityMatrix();
 	const WorldToLocalTransform = Math.MatrixInverse4x4(LocalToWorldTransform);
 
-	const SetUniforms = function(Shader)
+	const SetUniforms = function (Shader)
 	{
 		function SetUniform(Key)
 		{
-			Shader.SetUniform( Key, Params[Key] );
+			Shader.SetUniform(Key,Params[Key]);
 		}
 		Object.keys(Params).forEach(SetUniform);
-		
+
 		Shader.SetUniform('VertexRect',[0,0,1,1]);
 		Shader.SetUniform('ScreenToCameraTransform',ScreenToCameraTransform);
 		Shader.SetUniform('CameraToWorldTransform',CameraToWorldTransform);
@@ -153,11 +150,25 @@ function MeltGameRender(RenderTarget,GameState)
 		Shader.SetUniform('WorldToLocalTransform',WorldToLocalTransform);
 		Shader.SetUniform('EnviromentMapEquirect',EnviromentMapEquirect);
 		Shader.SetUniform('NoiseTexture',NoiseTexture);
-		const Time = (Pop.GetTimeNowMs() - StartTime)/1000;
+		const Time = (Pop.GetTimeNowMs() - StartTime) / 1000;
 		Shader.SetUniform('Time',Time);
 	}
 	RenderTarget.SetBlendModeAlpha();
-	RenderTarget.DrawGeometry( Quad, Shader, SetUniforms );
+	RenderTarget.DrawGeometry(Quad,Shader,SetUniforms);
+}
+
+function MeltGameRender(RenderTarget,GameState)
+{
+	const State = GameState.State;
+	const Runtime = GameState.Runtime;
+	RenderTarget.ClearColour(...Params.ClearColour);
+	Runtime.Camera.FovVertical = Params.FovVertical;
+
+	function RenderCamera(Camera,CameraIndex)
+	{
+		RenderScene(RenderTarget,Camera,Runtime);
+	}
+	Cameras.forEach(RenderCamera);
 }
 
 //	I think I've forgotten to commit a version of the engine, temp async call
@@ -200,6 +211,10 @@ async function ResetGame()
 	Game.Runtime.SceneShader = RegisterShaderAssetFilename(SceneRenderShaderFilename,'Quad.vert.glsl');
 	Game.Runtime.EnvironmentMapFile = await Pop.LoadFileAsImageAsync(EnvironmentMapFilename);
 	Game.Runtime.NoiseTexture = await Pop.LoadFileAsImageAsync(NoiseFilename);
+
+	Cameras.push(Game.Runtime.Camera);
+	UserCamera = Game.Runtime.Camera;
+
 	return Game;
 }
 
