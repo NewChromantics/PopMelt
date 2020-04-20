@@ -82,7 +82,7 @@ Params.ShowDepth = false;
 Params.ShowDepthFar = 30;
 Params.PassJitter = 0.001;
 Params.FloorTileSize = 10;
-Params.RenderEnvironmentSkybox = false;
+Params.RenderEnvironmentSkybox = true;
 
 const ParamsWindow = new Pop.ParamsWindow(Params,function(){});
 ParamsWindow.AddParam('RefractionScalar',0,1);
