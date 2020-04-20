@@ -3,23 +3,31 @@ precision highp float;
 in vec2 uv;
 uniform mat4 ScreenToCameraTransform;
 uniform mat4 CameraToWorldTransform;
-
 uniform bool DrawStepHeat = false;
-uniform float RefractionScalar = 0.66;
+uniform bool ShowDepth;
+uniform float ShowDepthFar;
+uniform float PassJitter;
 
+//	materials
+uniform float RefractionScalar = 0.66;
+uniform float Time;
+uniform float TimeMult;
+uniform sampler2D EnviromentMapEquirect;
+uniform sampler2D NoiseTexture;
+
+//	shapes
 const float4 MoonSphere = float4(0,0,0,5);
 uniform float MoonEdgeThickness = 0.2;
 uniform float MoonEdgeThicknessNoiseFreq;
 uniform float MoonEdgeThicknessNoiseScale;
+uniform float PlaneY;
+
+
+//	algo tweaks
 uniform float BouncePastEdge;
 uniform float NormalViaRayStart;
-uniform float Time;
-uniform float TimeMult;
-uniform bool ShowDepth;
-uniform float ShowDepthFar;
 
-uniform sampler2D EnviromentMapEquirect;
-uniform sampler2D NoiseTexture;
+
 
 struct TRay
 {
@@ -30,7 +38,15 @@ struct TRay
 struct TDebug
 {
 	int StepCount;
+	int EnvMapSamples;
 };
+TDebug TDebug_Alloc()
+{
+	TDebug Debug;
+	Debug.StepCount = 0;
+	Debug.EnvMapSamples = 0;
+	return Debug;
+}
 
 #define HIT_RESULT_MISS		0
 #define HIT_RESULT_ABSORB	1
@@ -107,13 +123,6 @@ float2 ViewToEquirect(float3 View3)
 	return uv;
 }
 
-float3 GetEnvironmentColour(float3 View)
-{
-	float2 uv = ViewToEquirect(View);
-	float3 Rgb = texture2D( EnviromentMapEquirect, uv ).xyz;
-	//float3 Rgb = texture2D( NoiseTexture, uv ).xyz;
-	return Rgb;
-}
 
 float3 NormalToRedGreen(float Normal)
 {
@@ -135,6 +144,27 @@ float Range(float Min,float Max,float Value)
 	return (Value-Min) / (Max-Min);
 }
 
+
+float3 GetEnvironmentColour(float3 View,inout TDebug Debug)
+{
+	float2 uv = ViewToEquirect(View);
+	
+	//	this texture sample kills, but we only ever do it once! texture must be inefficient
+	//float3 Rgb = texture2D( EnviromentMapEquirect, uv ).xyz;
+	float3 Rgb = float3(0.5,0.5,0.5);
+	
+	//	procedural ish
+	float3 ViewRgb = (View + float3(1,1,1) ) * 0.5;
+	Rgb = mix( Rgb, ViewRgb, 0.5 );
+	
+	//	debug samples
+	//Rgb = (Debug.EnvMapSamples > 0) ? float3(1,0,0) : float3(0,1,0);
+	
+	//float3 Rgb = float3(1,0,0);
+	//float3 Rgb = texture2D( NoiseTexture, uv ).xyz;
+	Debug.EnvMapSamples++;
+	return Rgb;
+}
 
 float GetMoonEdgeThickness(vec3 Position)
 {
@@ -282,7 +312,6 @@ TRay Hit_GetRefraction(THit Hit)
 	return Reflection;
 }
 
-uniform float PlaneY;
 
 THit RayMarchPlane(TRay Ray,inout TDebug Debug)
 {
@@ -324,7 +353,8 @@ THit RayMarchPlane(TRay Ray,inout TDebug Debug)
 	Hit.Colour = float3(0,0,0);
 
 	//	put holes in the floor
-	float2 xz = fract(Hit.Ray.Pos.xz / 20);
+	float SquareSize = 8.0;
+	float2 xz = fract(Hit.Ray.Pos.xz / (SquareSize*2.0));
 	bool Oddx = xz.x<0.5;
 	bool Oddy = xz.y<0.5;
 	if ( Oddx == Oddy )
@@ -343,8 +373,9 @@ THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 	const float MinDistance = 0.001;
 	const float CloseEnough = MinDistance;
 	const float MinStep = MinDistance;
-	const float MaxDistance = 100.0;
-	const int MaxSteps = 50;
+	//const float MaxDistance = 100.0;
+#define MaxSteps 40
+	//const int MaxSteps = 10;
 	float3 StartPos = Ray.Pos;
 	float RayTime = 0.01;
 	
@@ -368,6 +399,7 @@ THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 			
 			Hit.Colour = float3(1,1,1);
 			Hit.HitResult = HIT_RESULT_REFRACT;
+			//Hit.HitResult = HIT_RESULT_REFLECT;
 			Hit.Distance = length(Position - Ray.Pos);
 
 			//	inside
@@ -379,9 +411,6 @@ THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 			
 			return Hit;
 		}
-		
-		if (RayTime > MaxDistance)
-			break;//return float4(Position,0);
 	}
 	
 	return Hit;
@@ -399,18 +428,13 @@ THit AllocHit(TRay StartRay)
 THit RayMarchScene(TRay Ray,inout TDebug Debug)
 {
 	//	pick best hit
-	TRay Ray0 = Ray;
-	TRay Ray1 = Ray;
-	THit Hit1 = RayMarchPlane( Ray0, Debug );
-	THit Hit0 = RayMarchSphere( Ray1, Debug );
-
+	THit Hit1 = RayMarchPlane( Ray, Debug );
+	THit Hit0 = RayMarchSphere( Ray, Debug );
+	//Hit0.HitResult = HIT_RESULT_MISS;
 	Hit0.Distance = Hit_IsHit(Hit0) ? Hit0.Distance : 999;
 	Hit1.Distance = Hit_IsHit(Hit1) ? Hit1.Distance : 999;
 
-	if ( Hit0.Distance < Hit1.Distance )
-		return Hit0;
-	
-	return Hit1;
+	return ( Hit0.Distance < Hit1.Distance ) ? Hit0 : Hit1;
 }
 
 THit GetSkyboxHit(TRay Ray,out TDebug Debug)
@@ -419,25 +443,26 @@ THit GetSkyboxHit(TRay Ray,out TDebug Debug)
 	Hit.Ray = Ray;
 	Hit.SurfaceNormal = Ray.Dir;
 	Hit.HitResult = HIT_RESULT_ABSORB;
-	Hit.Colour = GetEnvironmentColour( Ray.Dir );
+	Hit.Colour = GetEnvironmentColour( Ray.Dir, Debug );
 	return Hit;
 }
 
 //	returns intersction pos, w=success
 THit RayTraceScene(TRay Ray,out TDebug Debug)
 {
-#define BOUNCES	4
+#define BOUNCES	5
 	//	save last hit in case we exceed bounces
 	THit LastHit;
 	//	should also be saving details about the first hit, as thats the actual surface
-	THit FirstHit;
+	//THit FirstHit;
+	float FirstHitDistance = 999;
 	
 	for (int Bounce=0;	Bounce<BOUNCES;	Bounce++)
 	{
 		THit NewHit = RayMarchScene( Ray, Debug );
 		
 		if ( Bounce == 0 )
-			FirstHit = NewHit;
+			FirstHitDistance = NewHit.Distance;
 
 		if ( Hit_IsMiss(NewHit) )
 		{
@@ -448,23 +473,21 @@ THit RayTraceScene(TRay Ray,out TDebug Debug)
 			//	this was a bounce, hit the sky box
 			NewHit = GetSkyboxHit(Ray,Debug);
 			//	restore original hit depth
-			NewHit.Distance = FirstHit.Distance;
+			NewHit.Distance = FirstHitDistance;
 			return NewHit;
 		}
-		
-		if ( NewHit.HitResult == HIT_RESULT_REFLECT )
+		else if ( NewHit.HitResult == HIT_RESULT_REFLECT )
 		{
 			//	save in case it's the last bounce
 			LastHit = NewHit;
 
 			//	reflect - todo may need to step away from surface like in refraction
 			Ray.Pos = NewHit.Ray.Pos;
-			//Ray.Dir = reflect( normalize(NewHit.Ray.Dir), normalize(-NewHit.SurfaceNormal) );
-			Ray.Dir = NewHit.SurfaceNormal;
+			Ray.Dir = reflect( normalize(NewHit.Ray.Dir), normalize(NewHit.SurfaceNormal) );
+			//Ray.Dir = NewHit.SurfaceNormal;
 			continue;
 		}
-		
-		if ( NewHit.HitResult == HIT_RESULT_REFRACT )
+		else if ( NewHit.HitResult == HIT_RESULT_REFRACT )
 		{
 			//	save in case it's the last bounce
 			LastHit = NewHit;
@@ -473,16 +496,18 @@ THit RayTraceScene(TRay Ray,out TDebug Debug)
 			Ray = Hit_GetRefraction(NewHit);
 			continue;
 		}
-		
-		//	abosrb
-		//	hit surface, ray stops here
-		//	gr: break & LastHit isn't returning properly
-		NewHit.Distance = FirstHit.Distance;
-		return NewHit;
-		LastHit = NewHit;
-		break;
+		else
+		{
+			//	abosrb
+			//	hit surface, ray stops here
+			//	gr: break & LastHit isn't returning properly
+			NewHit.Distance = FirstHitDistance;
+			return NewHit;
+			LastHit = NewHit;
+			break;
+		}
 	}
-	LastHit.Distance = FirstHit.Distance;
+	LastHit.Distance = FirstHitDistance;
 	return LastHit;
 }
 
@@ -490,26 +515,36 @@ THit RayTraceScene(TRay Ray,out TDebug Debug)
 void main()
 {
 	TRay Ray = GetWorldRay();
-	float4 Colour = float4( GetEnvironmentColour(Ray.Dir), 1 );
+	TDebug Debug = TDebug_Alloc();
+	float4 EnvColour = float4( GetEnvironmentColour(Ray.Dir,Debug), 1.0 );
 	
-	TDebug Debug;
 	THit SceneHit = RayTraceScene( Ray, Debug );
-	/*
-	if ( SceneHit.Hit )
-		gl_FragColor = float4(0,1,0,1);
-	else
-		gl_FragColor = float4(1,0,0,1);
-	return;
-*/
 	float4 SceneColour = float4( SceneHit.Colour, Hit_IsHit(SceneHit) ? 1.0 : 0.0 );
-	/*
-	float StepHeat =
-	float4 SphereColour = RayMarchSphere( Ray, StepHeat );
-	if ( DrawStepHeat )
-		SphereColour.xyz = NormalToRedGreen( 1.0 - StepHeat );
-	*/
-	Colour = mix( Colour, SceneColour, SceneColour.w );
-	gl_FragColor = Colour;
+	
+	//	first colour should always be solid so either bg or hit
+	SceneColour = mix( EnvColour, SceneColour, SceneColour.w );
+
+	//	gr: rubbish AND slow
+#define PASSES	0
+	float2 Jitter[4];//PASSES];
+	Jitter[0] = float2( PassJitter*-0.5, PassJitter*-0.5 );
+	Jitter[1] = float2( PassJitter*0.5, PassJitter*-0.5 );
+	Jitter[2] = float2( PassJitter*0.5, PassJitter*0.5 );
+	Jitter[3] = float2( PassJitter*-0.5, PassJitter*0.5 );
+	
+#if PASSES > 0	//	eek without this, we lose 10fps
+	for ( int p=0;	p<PASSES;	p++ )
+	{
+		//	jitter ray
+		TRay PRay = Ray;
+		PRay.Dir.xy += Jitter[p];
+		THit SceneHit2 = RayTraceScene( PRay, Debug );
+		float Hitw = Hit_IsHit(SceneHit) ? 1.0 : 0.0;
+		SceneColour.xyz = mix( SceneColour.xyz, SceneHit2.Colour, Hitw*0.5 );
+	}
+#endif
+	
+	gl_FragColor = SceneColour;
 	
 	if ( ShowDepth && Hit_IsHit(SceneHit) )
 	{

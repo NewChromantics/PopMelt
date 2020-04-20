@@ -16,7 +16,9 @@ Pop.Include('PopEngineCommon/PopCamera.js');
 
 Pop.Include('AssetManager.js');
 
-
+const SceneRenderShaderFilename = 'SceneTrace.frag.glsl';
+const EnvironmentMapFilename = 'TestEnvMapEquirect.jpg';
+const NoiseFilename = 'Noise.png';
 
 const Window = new Pop.Opengl.Window("Melt");
 Window.RenderCounter = new Pop.FrameCounter('fps');
@@ -78,6 +80,7 @@ Params.TimeMult = 1.01;
 Params.PlaneY = -10;
 Params.ShowDepth = false;
 Params.ShowDepthFar = 30;
+Params.PassJitter = 0.001;
 
 const ParamsWindow = new Pop.ParamsWindow(Params,function(){});
 ParamsWindow.AddParam('RefractionScalar',0,1);
@@ -90,6 +93,7 @@ ParamsWindow.AddParam('TimeMult',0,5);
 ParamsWindow.AddParam('PlaneY',-50,50);
 ParamsWindow.AddParam('ShowDepth');
 ParamsWindow.AddParam('ShowDepthFar',1,50);
+ParamsWindow.AddParam('PassJitter',0.0001,0.01);
 
 
 
@@ -156,8 +160,7 @@ async function LoadAssets()
 {
 	const AssetFilenames =
 	[
-	 'SceneMarch.frag.glsl',
-	 'SceneTrace.frag.glsl',
+	 SceneRenderShaderFilename,
 	 'Quad.vert.glsl'
 	];
 	const AssetPromises = AssetFilenames.map( Pop.LoadFileAsStringAsync );
@@ -178,9 +181,9 @@ async function ResetGame()
 	Game.Runtime = {};
 	Game.Runtime.Render = function(RenderTarget)	{	MeltGameRender(RenderTarget,Game);	}
 	Game.Runtime.Camera = new Pop.Camera();
-	Game.Runtime.SceneShader = RegisterShaderAssetFilename('SceneTrace.frag.glsl','Quad.vert.glsl');
-	Game.Runtime.EnvironmentMapFile = await Pop.LoadFileAsImageAsync('TestEnvMapEquirect.jpg');
-	Game.Runtime.NoiseTexture = await Pop.LoadFileAsImageAsync('Noise.png');
+	Game.Runtime.SceneShader = RegisterShaderAssetFilename(SceneRenderShaderFilename,'Quad.vert.glsl');
+	Game.Runtime.EnvironmentMapFile = await Pop.LoadFileAsImageAsync(EnvironmentMapFilename);
+	Game.Runtime.NoiseTexture = await Pop.LoadFileAsImageAsync(NoiseFilename);
 	return Game;
 }
 
