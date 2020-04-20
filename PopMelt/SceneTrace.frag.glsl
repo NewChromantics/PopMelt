@@ -15,6 +15,8 @@ uniform float BouncePastEdge;
 uniform float NormalViaRayStart;
 uniform float Time;
 uniform float TimeMult;
+uniform bool ShowDepth;
+uniform float ShowDepthFar;
 
 uniform sampler2D EnviromentMapEquirect;
 uniform sampler2D NoiseTexture;
@@ -340,7 +342,7 @@ THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 			//Hit.Colour = NormalToRedGreen(EdgeDot);
 			Hit.Colour = float3(1,1,1);
 			Hit.Hit = true;
-			Hit.Distance = HitDistance;
+			Hit.Distance = length(Position - Ray.Pos);
 
 			//	gr; use EdgeDot > 0.5 for reflecting light?
 			{
@@ -418,9 +420,15 @@ THit RayTraceScene(TRay Ray,out TDebug Debug)
 #define BOUNCES	4
 	//	save last hit in case we exceed bounces
 	THit LastHit;
+	//	should also be saving details about the first hit, as thats the actual surface
+	THit FirstHit;
+	
 	for (int Bounce=0;	Bounce<BOUNCES;	Bounce++)
 	{
 		THit NewHit = RayMarchScene( Ray, Debug );
+		
+		if ( Bounce == 0 )
+			FirstHit = NewHit;
 
 		if ( !NewHit.Hit )
 		{
@@ -429,7 +437,9 @@ THit RayTraceScene(TRay Ray,out TDebug Debug)
 				return NewHit;
 		
 			//	this was a bounce, hit the sky box
-			return GetSkyboxHit(Ray,Debug);
+			NewHit = GetSkyboxHit(Ray,Debug);
+			NewHit.Distance = FirstHit.Distance;
+			return NewHit;
 		}
 		
 		if ( NewHit.Bounce )
@@ -444,10 +454,12 @@ THit RayTraceScene(TRay Ray,out TDebug Debug)
 	
 		//	hit surface, ray stops here
 		//	gr: break & LastHit isn't returning properly
+		NewHit.Distance = FirstHit.Distance;
 		return NewHit;
 		LastHit = NewHit;
 		break;
 	}
+	LastHit.Distance = FirstHit.Distance;
 	return LastHit;
 }
 
@@ -475,5 +487,11 @@ void main()
 	*/
 	Colour = mix( Colour, SceneColour, SceneColour.w );
 	gl_FragColor = Colour;
+	
+	if ( ShowDepth && SceneHit.Hit )
+	{
+		float DistanceNorm = SceneHit.Distance/ShowDepthFar;
+		gl_FragColor = float4( DistanceNorm,DistanceNorm,DistanceNorm,1.0);
+	}
 }
 

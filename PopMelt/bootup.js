@@ -76,6 +76,8 @@ Params.BouncePastEdge = 0.24;
 Params.NormalViaRayStart = 0.001;
 Params.TimeMult = 1.01;
 Params.PlaneY = -10;
+Params.ShowDepth = false;
+Params.ShowDepthFar = 30;
 
 const ParamsWindow = new Pop.ParamsWindow(Params,function(){});
 ParamsWindow.AddParam('RefractionScalar',0,1);
@@ -86,6 +88,9 @@ ParamsWindow.AddParam('BouncePastEdge',0.001,1);
 ParamsWindow.AddParam('NormalViaRayStart',0,1);
 ParamsWindow.AddParam('TimeMult',0,5);
 ParamsWindow.AddParam('PlaneY',-50,50);
+ParamsWindow.AddParam('ShowDepth');
+ParamsWindow.AddParam('ShowDepthFar',1,50);
+
 
 
 function GameRender(RenderTarget)
