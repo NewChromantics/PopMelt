@@ -10,6 +10,7 @@ uniform float PassJitter;
 
 //	materials
 uniform float RefractionScalar;// = 0.66;
+uniform float RefractionAberrationDelta; // = +0.01
 uniform float Time;
 uniform float TimeMult;
 uniform sampler2D EnviromentMapEquirect;
@@ -18,7 +19,7 @@ uniform float FloorTileSize;
 uniform bool RenderEnvironmentSkybox;
 
 //	shapes
-const float4 MoonSphere = float4(0,0,-4,0.5);
+const float4 MoonSphere = float4(0,0,0,0.5);
 uniform float MoonEdgeThickness;
 uniform float MoonEdgeThicknessNoiseFreq;
 uniform float MoonEdgeThicknessNoiseScale;
@@ -86,14 +87,15 @@ vec3 ScreenToWorld(float2 uv,float z)
 
 TRay GetWorldRay()
 {
-	float Near = 0.01;
+	float Near = 0.001;
 	float Far = 1000.0;
 	TRay Ray;
 	Ray.Pos = ScreenToWorld( uv, Near );
 	Ray.Dir = ScreenToWorld( uv, Far ) - Ray.Pos;
 	
 	//	gr: this is backwards!
-	Ray.Dir = -normalize( Ray.Dir );
+	Ray.Dir = -Ray.Dir;
+	Ray.Dir = normalize( Ray.Dir );
 	return Ray;
 }
 
@@ -152,6 +154,9 @@ float3 GetEnvironmentColour(float3 View,inout TDebug Debug)
 	float2 uv = ViewToEquirect(View);
 	
 	float3 Rgb = float3(1.0,1.0,1.0);
+	
+	//	even having this if kills perf with texture fetch misses
+	
 	if (RenderEnvironmentSkybox)
 	{
 		//	this texture sample kills, but we only ever do it once! texture must be inefficient
@@ -321,16 +326,17 @@ vec3 refract2(vec3 v,vec3 n,float ni_over_nt)
 #endif
 
 
-TRay Hit_GetRefraction(THit Hit)
+
+TRay Hit_GetRefractionSingle(THit Hit,float RefractionScalar)
 {
 	//	gr: we can make all this generic. Get a distance (including -X when inside)
 	//		return a refrect option instead of bounce, then work this out to change the ray
 	//	gr: todo: do inside-distance stuff
 	
 	//float RefractionScalar = 0.66;	//	for chromatic abberation, use r=0.65 g=0.66 b=0.67
-	vec3 Refracted = refract2( normalize(Hit.Ray.Dir), normalize(Hit.SurfaceNormal), RefractionScalar );
-	vec3 Reflected = reflect( normalize(Hit.Ray.Dir), normalize(Hit.SurfaceNormal) );
-	float EdgeDot = (1.0-abs(dot(normalize(Hit.Ray.Dir),Hit.SurfaceNormal)));
+	vec3 Refracted = refract2( Hit.Ray.Dir, Hit.SurfaceNormal, RefractionScalar );
+	vec3 Reflected = reflect( Hit.Ray.Dir, Hit.SurfaceNormal );
+	float EdgeDot = (1.0-abs(dot(Hit.Ray.Dir,Hit.SurfaceNormal)));
 	Refracted = Slerp( Refracted, Reflected, EdgeDot );
 	
 	TRay Reflection;
@@ -341,6 +347,14 @@ TRay Hit_GetRefraction(THit Hit)
 	//	gr: move to scene bouncer?
 	Reflection.Pos += Reflection.Dir * BouncePastEdge;
 	return Reflection;
+}
+
+TRay Hit_GetRefraction(THit Hit,out TRay RedRefraction,out TRay BlueRefraction)
+{
+	RedRefraction = Hit_GetRefractionSingle( Hit, RefractionScalar - RefractionAberrationDelta );
+	BlueRefraction = Hit_GetRefractionSingle( Hit, RefractionScalar + RefractionAberrationDelta );
+	TRay GreenRefraction = Hit_GetRefractionSingle( Hit, RefractionScalar );
+	return GreenRefraction;
 }
 
 
@@ -405,7 +419,7 @@ THit RayMarchSphere(TRay Ray,inout TDebug Debug)
 	const float CloseEnough = MinDistance;
 	const float MinStep = MinDistance;
 	//const float MaxDistance = 100.0;
-#define MaxSteps 40
+#define MaxSteps 50
 	//const int MaxSteps = 10;
 	float3 StartPos = Ray.Pos;
 	float RayTime = 0.01;
@@ -484,6 +498,48 @@ THit GetSkyboxHit(TRay Ray,out TDebug Debug)
 	return Hit;
 }
 
+
+THit GetRedBlueHit(TRay Ray,out TDebug Debug)
+{
+#define REDBLUE_BOUNCES	5
+	THit LastHit;
+	for (int Bounce=0;	Bounce<REDBLUE_BOUNCES;	Bounce++)
+	{
+		THit NewHit = RayMarchScene( Ray, Debug );
+		if ( Hit_IsMiss(NewHit) )
+		{
+			LastHit = GetSkyboxHit(Ray,Debug);
+			break;
+		}
+		else if ( NewHit.HitResult == HIT_RESULT_REFLECT )
+		{
+			//	save in case it's the last bounce
+			LastHit = NewHit;
+			//	reflect - todo may need to step away from surface like in refraction
+			Ray.Pos = NewHit.Ray.Pos;
+			Ray.Dir = reflect( NewHit.Ray.Dir, NewHit.SurfaceNormal );
+			continue;
+		}
+		else if ( NewHit.HitResult == HIT_RESULT_REFRACT )
+		{
+			//	save in case it's the last bounce
+			LastHit = NewHit;
+			
+			//	reflect
+			Ray = Hit_GetRefractionSingle(NewHit, RefractionScalar );
+			continue;
+		}
+		else
+		{
+			//	abosrb
+			//	hit surface, ray stops here
+			LastHit = NewHit;
+			break;
+		}
+	}
+	return LastHit;
+}
+
 //	returns intersction pos, w=success
 THit RayTraceScene(TRay Ray,out TDebug Debug)
 {
@@ -493,6 +549,15 @@ THit RayTraceScene(TRay Ray,out TDebug Debug)
 	//	should also be saving details about the first hit, as thats the actual surface
 	//THit FirstHit;
 	float FirstHitDistance = 999.0;
+	
+	//	gr: would be good to do a stack of paths
+	//		then add up the final absorbing colours
+	//		this way, we could do x3 for reflections, or 1x for refraction
+	//		and scale by case
+	//		that would mean we get a red path of a red path... not neccessary?
+	//		instead, we do a seperate red&blue path at the point of refraction
+	TRay RedBluePaths[2];
+	bool HasRedBluePath = false;
 	
 	for (int Bounce=0;	Bounce<BOUNCES;	Bounce++)
 	{
@@ -520,7 +585,7 @@ THit RayTraceScene(TRay Ray,out TDebug Debug)
 
 			//	reflect - todo may need to step away from surface like in refraction
 			Ray.Pos = NewHit.Ray.Pos;
-			Ray.Dir = reflect( normalize(NewHit.Ray.Dir), normalize(NewHit.SurfaceNormal) );
+			Ray.Dir = reflect( NewHit.Ray.Dir, NewHit.SurfaceNormal );
 			//Ray.Dir = NewHit.SurfaceNormal;
 			continue;
 		}
@@ -530,20 +595,51 @@ THit RayTraceScene(TRay Ray,out TDebug Debug)
 			LastHit = NewHit;
 			
 			//	reflect
-			Ray = Hit_GetRefraction(NewHit);
+			Ray = Hit_GetRefraction( NewHit, RedBluePaths[0], RedBluePaths[1] );
+			HasRedBluePath = true;
+			//Ray = Hit_GetRefractionSingle(NewHit, RefractionScalar );
 			continue;
 		}
 		else
 		{
 			//	abosrb
 			//	hit surface, ray stops here
-			//	gr: break & LastHit isn't returning properly
-			NewHit.Distance = FirstHitDistance;
-			return NewHit;
 			LastHit = NewHit;
 			break;
 		}
 	}
+	
+	//	run the red & blue paths and merge result colour
+	if ( HasRedBluePath )
+	{
+		float3 RedBlueColour[2];
+		for ( int RedBlue=0;	RedBlue<2;	RedBlue++ )
+		{
+			TRay RedBlueRay = RedBluePaths[RedBlue];
+			THit RedBlueHit = GetRedBlueHit( RedBlueRay, Debug );
+			
+			float w = (RedBlueHit.HitResult == HIT_RESULT_ABSORB) ? 1.0 : 0.0;
+			RedBlueColour[RedBlue] = mix( LastHit.Colour, RedBlueHit.Colour, w );
+		}
+		
+		vec4 colourScalar = vec4(700.0, 560.0, 490.0, 1.0);	// Based on the true wavelengths of red, green, blue light.
+		colourScalar /= max(max(colourScalar.x, colourScalar.y), colourScalar.z);
+		colourScalar *= 2.0;
+		
+		float3 Red = RedBlueColour[0];
+		float3 Green = LastHit.Colour;
+		float3 Blue = RedBlueColour[1];
+		float3 FinalColour = float3(0,0,0);
+		//	mix in refracted colours
+		{
+			FinalColour.r += Red.r;// * colourScalar.r;
+			FinalColour.g += Green.g;// * colourScalar.g;
+			FinalColour.b += Blue.b;// * colourScalar.b;
+		}
+		//fragColor /= numTaps;
+		LastHit.Colour = FinalColour;
+	}
+	
 	LastHit.Distance = FirstHitDistance;
 	return LastHit;
 }

@@ -75,6 +75,7 @@ const Params = {};
 Params.ClearColour = [0.8,0.5,0.1];
 Params.FovVertical = 45;
 Params.RefractionScalar = 0.66;
+Params.RefractionAberrationDelta = 0.01;
 Params.MoonEdgeThickness = 0.2;
 Params.MoonEdgeThicknessNoiseFreq = 1.0;
 Params.MoonEdgeThicknessNoiseScale = 1.0;
@@ -86,10 +87,11 @@ Params.ShowDepth = false;
 Params.ShowDepthFar = 30;
 Params.PassJitter = 0.001;
 Params.FloorTileSize = 10;
-Params.RenderEnvironmentSkybox = true;
+Params.RenderEnvironmentSkybox = false;
 
 const ParamsWindow = new Pop.ParamsWindow(Params,function(){});
 ParamsWindow.AddParam('RefractionScalar',0,1);
+ParamsWindow.AddParam('RefractionAberrationDelta',0,0.3);
 ParamsWindow.AddParam('MoonEdgeThickness',0,1);
 ParamsWindow.AddParam('MoonEdgeThicknessNoiseFreq',0,10);
 ParamsWindow.AddParam('MoonEdgeThicknessNoiseScale',0,10);
@@ -226,6 +228,7 @@ async function ResetGame()
 	Game.Runtime = {};
 	Game.Runtime.Render = function(RenderTarget)	{	MeltGameRender(RenderTarget,Game);	}
 	Game.Runtime.Camera = new Pop.Camera();
+	Game.Runtime.Camera.Position = [0,0.5,3];
 	Game.Runtime.SceneShader = RegisterShaderAssetFilename(SceneRenderShaderFilename,'Quad.vert.glsl');
 	Game.Runtime.EnvironmentMapFile = await Pop.LoadFileAsImageAsync(EnvironmentMapFilename);
 	Game.Runtime.NoiseTexture = await Pop.LoadFileAsImageAsync(NoiseFilename);
